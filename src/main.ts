@@ -36,6 +36,7 @@ const DAILY_REPORT_KV_KEY = "dailyReport:data";
 const DAILY_REPORT_CRON_KV_KEY = "dailyReport:cronJobId";
 const DAILY_REPORT_SENT_KV_KEY = "dailyReport:lastSentDate";
 const MONITORED_SUBREDDITS = ["spectrum", "spectrum_official"] as const;
+const PLAYTEST_SUBREDDIT = "spectrum_modmail_dev";
 
 const MOD_QUEUE_APPROVE_ACTIONS = new Set(["approvelink", "approvecomment"]);
 const MOD_QUEUE_REMOVE_ACTIONS = new Set([
@@ -359,18 +360,31 @@ function normalizeSubredditName(name: string): string {
   return name.replace(/^r\//i, "").trim().toLowerCase();
 }
 
-function isMonitoredSubreddit(subredditName: string): boolean {
+function resolveSubredditGroup(subredditName: string): MonitoredSubreddit | null {
   const normalized = normalizeSubredditName(subredditName);
-  return normalized === "spectrum" || normalized === "spectrum_official";
+
+  if (normalized === "spectrum" || normalized === PLAYTEST_SUBREDDIT) {
+    return "spectrum";
+  }
+
+  if (normalized === "spectrum_official") {
+    return "spectrum_official";
+  }
+
+  return null;
+}
+
+function isMonitoredSubreddit(subredditName: string): boolean {
+  return resolveSubredditGroup(subredditName) !== null;
 }
 
 function getWebhookSettingName(
   subredditName: string,
   category: WebhookCategory
 ): string | null {
-  const normalized = normalizeSubredditName(subredditName);
+  const group = resolveSubredditGroup(subredditName);
 
-  if (normalized === "spectrum") {
+  if (group === "spectrum") {
     switch (category) {
       case "modmail":
         return "spectrumModmailWebhook";
@@ -381,7 +395,7 @@ function getWebhookSettingName(
     }
   }
 
-  if (normalized === "spectrum_official") {
+  if (group === "spectrum_official") {
     switch (category) {
       case "modmail":
         return "spectrumOfficialModmailWebhook";
@@ -443,15 +457,17 @@ function getLocalHour(date: Date, timeZone: string): number {
 }
 
 function displaySubredditLabel(subreddit: string): string {
-  return subreddit === "spectrum_official" ? "r/Spectrum_Official" : "r/Spectrum";
+  if (subreddit === "spectrum_official") {
+    return "r/Spectrum_Official";
+  }
+  if (subreddit === PLAYTEST_SUBREDDIT) {
+    return "r/spectrum_modmail_dev";
+  }
+  return "r/Spectrum";
 }
 
 function getMonitoredSubredditKey(subredditName: string): MonitoredSubreddit | null {
-  const normalized = normalizeSubredditName(subredditName);
-  if (normalized === "spectrum" || normalized === "spectrum_official") {
-    return normalized;
-  }
-  return null;
+  return resolveSubredditGroup(subredditName);
 }
 
 function emptyMetrics(): SubredditMetrics {
