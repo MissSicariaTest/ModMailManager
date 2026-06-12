@@ -5,14 +5,14 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "bump-major": "devvit upload --bump major",
-    "bump-minor": "devvit upload --bump minor",
-    "bump-patch": "devvit upload --bump patch",
-    "bump-prerelease": "devvit upload --bump prerelease",
-    "publish-major": "npm run bump-major && devvit publish --public",
-    "publish-minor": "npm run bump-minor && devvit publish --public",
-    "publish-patch": "npm run bump-patch && devvit publish --public",
-    "publish-prerelease": "npm run bump-prerelease && devvit publish --public",
+    "bump-major": "npx devvit upload --bump major",
+    "bump-minor": "npx devvit upload --bump minor",
+    "bump-patch": "npx devvit upload --bump patch",
+    "bump-prerelease": "npx devvit upload --bump prerelease",
+    "publish-major": "npm run bump-major && npx devvit publish --public",
+    "publish-minor": "npm run bump-minor && npx devvit publish --public",
+    "publish-patch": "npm run bump-patch && npx devvit publish --public",
+    "publish-prerelease": "npm run bump-prerelease && npx devvit publish --public",
     "test": "npm run test:unit",
     "test:unit": "vitest --run --passWithNoTests"
   },
@@ -20,6 +20,7 @@
     "@devvit/public-api": "0.12.1"
   },
   "devDependencies": {
+    "@devvit/cli": "0.13.3",
     "typescript": "5.9.3",
     "vitest": "^4.0.14"
   }
