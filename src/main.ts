@@ -7,7 +7,7 @@ import {
   PostReport,
   PostSubmit,
 } from "@devvit/protos";
-import { Devvit, TriggerContext } from "@devvit/public-api";
+import { Devvit, JobContext, TriggerContext } from "@devvit/public-api";
 
 const DISCORD_WEBHOOK_HOSTS = [
   "canary.discord.com",
@@ -27,8 +27,27 @@ const POST_WHITE = 0xffffff;
 const PREVIEW_LENGTH = 300;
 const TITLE_LENGTH = 256;
 const FIELD_LENGTH = 1024;
+const REPORT_TIMEZONE = "America/New_York";
+const REPORT_HOUR = 8;
+const DAILY_REPORT_JOB_NAME = "dailyReport";
+const DAILY_STATS_TTL_SECONDS = 60 * 60 * 24 * 14;
+const MONITORED_SUBREDDITS = ["spectrum", "spectrum_official"] as const;
 
 type WebhookCategory = "modmail" | "modqueue" | "newposts";
+
+type DailyStatField =
+  | "modmail"
+  | "modmail_private"
+  | "modqueue_reported_post"
+  | "modqueue_reported_comment"
+  | "modqueue_automod_post"
+  | "modqueue_automod_comment"
+  | "newposts";
+
+type DailyActivity = {
+  label: string;
+  url: string;
+};
 
 type DiscordEmbedField = {
   name: string;
@@ -39,6 +58,7 @@ type DiscordEmbedField = {
 type DiscordEmbed = {
   title?: string;
   url?: string;
+  description?: string;
   author?: {
     name: string;
     url?: string;
@@ -56,6 +76,7 @@ type DiscordWebhookPayload = {
 Devvit.configure({
   http: true,
   redditAPI: true,
+  redis: true,
 });
 
 Devvit.addSettings([
@@ -197,6 +218,37 @@ Devvit.addTrigger({
   },
 });
 
+Devvit.addSchedulerJob({
+  name: DAILY_REPORT_JOB_NAME,
+  onRun: async (_event, context: JobContext) => {
+    try {
+      await maybeSendDailyReport(context);
+    } catch (error) {
+      console.error(
+        "Daily report scheduler error:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  },
+});
+
+Devvit.addTrigger({
+  events: ["AppInstall", "AppUpgrade"],
+  onEvent: async (_event, context: TriggerContext) => {
+    try {
+      if (!context) {
+        throw new Error("Context is probably undefined");
+      }
+      await ensureDailyReportScheduled(context);
+    } catch (error) {
+      console.error(
+        "App install/upgrade scheduling error:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  },
+});
+
 function truncateDescription(description: string, maxLength: number = 4096): string {
   if (description.length <= maxLength) {
     return description;
@@ -292,6 +344,239 @@ function sleep(ms: number): Promise<void> {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getDateKeyInTimezone(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function getPreviousDateKey(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function getLocalHour(date: Date, timeZone: string): number {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    hour12: false,
+  }).format(date);
+  return Number.parseInt(hour, 10);
+}
+
+function formatReportDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(year, month - 1, day));
+}
+
+function displaySubredditLabel(subreddit: string): string {
+  return subreddit === "spectrum_official" ? "r/Spectrum_Official" : "r/Spectrum";
+}
+
+function dailyStatsKey(dateKey: string, subreddit: string): string {
+  return `daily:stats:${dateKey}:${subreddit}`;
+}
+
+function dailyActivityKey(dateKey: string, subreddit: string): string {
+  return `daily:activity:${dateKey}:${subreddit}`;
+}
+
+function parseStatValue(stats: Record<string, string>, field: DailyStatField): number {
+  return Number.parseInt(stats[field] ?? "0", 10) || 0;
+}
+
+function buildSubredditSummary(stats: Record<string, string>): string {
+  const modmail = parseStatValue(stats, "modmail");
+  const modmailPrivate = parseStatValue(stats, "modmail_private");
+  const reportedPosts = parseStatValue(stats, "modqueue_reported_post");
+  const reportedComments = parseStatValue(stats, "modqueue_reported_comment");
+  const automodPosts = parseStatValue(stats, "modqueue_automod_post");
+  const automodComments = parseStatValue(stats, "modqueue_automod_comment");
+  const newPosts = parseStatValue(stats, "newposts");
+
+  const modmailLine =
+    modmailPrivate > 0
+      ? `Modmail: ${modmail} (${modmailPrivate} private note${modmailPrivate === 1 ? "" : "s"})`
+      : `Modmail: ${modmail}`;
+
+  return [
+    modmailLine,
+    `Mod Queue: ${reportedPosts} reported post${reportedPosts === 1 ? "" : "s"}, ${reportedComments} reported comment${reportedComments === 1 ? "" : "s"}, ${automodPosts} AutoMod post${automodPosts === 1 ? "" : "s"}, ${automodComments} AutoMod comment${automodComments === 1 ? "" : "s"}`,
+    `New Posts: ${newPosts}`,
+  ].join("\n");
+}
+
+async function recordDailyActivity(
+  context: TriggerContext,
+  subredditName: string,
+  stat: DailyStatField,
+  activity?: DailyActivity
+): Promise<void> {
+  const subreddit = normalizeSubredditName(subredditName);
+  const dateKey = getDateKeyInTimezone(new Date(), REPORT_TIMEZONE);
+  const statsKey = dailyStatsKey(dateKey, subreddit);
+
+  await context.redis.global.hIncrBy(statsKey, stat, 1);
+  await context.redis.global.expire(statsKey, DAILY_STATS_TTL_SECONDS);
+
+  if (activity) {
+    const activityKey = dailyActivityKey(dateKey, subreddit);
+    await context.redis.global.zAdd(activityKey, {
+      member: truncateField(`${activity.label}|${activity.url}`),
+      score: Date.now(),
+    });
+    await context.redis.global.expire(activityKey, DAILY_STATS_TTL_SECONDS);
+  }
+}
+
+async function getReportingWebhook(context: JobContext | TriggerContext): Promise<string | null> {
+  const webhook = (await context.settings.get("reportingWebhook")) as string;
+  if (!webhook) {
+    console.error('No webhook URL configured for setting "reportingWebhook"');
+    return null;
+  }
+
+  if (!isDiscordWebhook(webhook)) {
+    console.error('Setting "reportingWebhook" is not a valid Discord webhook URL');
+    return null;
+  }
+
+  return webhook;
+}
+
+async function ensureDailyReportScheduled(context: TriggerContext): Promise<void> {
+  const existingJobId = await context.redis.global.get("daily:report:cronJobId");
+  if (existingJobId) {
+    return;
+  }
+
+  const cronJobId = await context.scheduler.runJob({
+    name: DAILY_REPORT_JOB_NAME,
+    cron: "0 * * * *",
+  });
+
+  await context.redis.global.set("daily:report:cronJobId", cronJobId);
+}
+
+async function maybeSendDailyReport(context: JobContext): Promise<void> {
+  const now = new Date();
+  if (getLocalHour(now, REPORT_TIMEZONE) !== REPORT_HOUR) {
+    return;
+  }
+
+  const todayKey = getDateKeyInTimezone(now, REPORT_TIMEZONE);
+  const sentKey = `daily:report:sent:${todayKey}`;
+  if (await context.redis.global.get(sentKey)) {
+    return;
+  }
+
+  const reportDateKey = getPreviousDateKey(todayKey);
+  await sendDailyReport(context, reportDateKey);
+  await context.redis.global.set(sentKey, "1");
+  await context.redis.global.expire(sentKey, 60 * 60 * 48);
+}
+
+async function sendDailyReport(context: JobContext, reportDateKey: string): Promise<void> {
+  const webhook = await getReportingWebhook(context);
+  if (!webhook) {
+    return;
+  }
+
+  const fields: DiscordEmbedField[] = [];
+  const totals = {
+    modmail: 0,
+    modmailPrivate: 0,
+    reportedPosts: 0,
+    reportedComments: 0,
+    automodPosts: 0,
+    automodComments: 0,
+    newPosts: 0,
+  };
+
+  for (const subreddit of MONITORED_SUBREDDITS) {
+    const stats = await context.redis.global.hGetAll(dailyStatsKey(reportDateKey, subreddit));
+    const modmail = parseStatValue(stats, "modmail");
+    const modmailPrivate = parseStatValue(stats, "modmail_private");
+    const reportedPosts = parseStatValue(stats, "modqueue_reported_post");
+    const reportedComments = parseStatValue(stats, "modqueue_reported_comment");
+    const automodPosts = parseStatValue(stats, "modqueue_automod_post");
+    const automodComments = parseStatValue(stats, "modqueue_automod_comment");
+    const newPosts = parseStatValue(stats, "newposts");
+
+    totals.modmail += modmail;
+    totals.modmailPrivate += modmailPrivate;
+    totals.reportedPosts += reportedPosts;
+    totals.reportedComments += reportedComments;
+    totals.automodPosts += automodPosts;
+    totals.automodComments += automodComments;
+    totals.newPosts += newPosts;
+
+    fields.push({
+      name: displaySubredditLabel(subreddit),
+      value: truncateField(buildSubredditSummary(stats)),
+    });
+
+    const activities = await context.redis.global.zRange(
+      dailyActivityKey(reportDateKey, subreddit),
+      0,
+      4,
+      { by: "rank", reverse: true }
+    );
+
+    if (activities.length > 0) {
+      const highlights = activities
+        .map((entry) => {
+          const [label, url] = entry.member.split("|");
+          return url ? `[${label}](${url})` : label;
+        })
+        .join("\n");
+
+      fields.push({
+        name: `${displaySubredditLabel(subreddit)} Highlights`,
+        value: truncateField(highlights || "No highlights recorded."),
+      });
+    }
+  }
+
+  const totalSummary = [
+    totals.modmailPrivate > 0
+      ? `Modmail: ${totals.modmail} (${totals.modmailPrivate} private note${totals.modmailPrivate === 1 ? "" : "s"})`
+      : `Modmail: ${totals.modmail}`,
+    `Mod Queue: ${totals.reportedPosts} reported posts, ${totals.reportedComments} reported comments, ${totals.automodPosts} AutoMod posts, ${totals.automodComments} AutoMod comments`,
+    `New Posts: ${totals.newPosts}`,
+  ].join("\n");
+
+  fields.push({
+    name: "Combined Totals",
+    value: truncateField(totalSummary),
+  });
+
+  const payload: DiscordWebhookPayload = {
+    embeds: [
+      {
+        title: truncateTitle(`Daily Report — ${formatReportDate(reportDateKey)}`),
+        description: truncateDescription(
+          `Summary of moderation activity for ${formatReportDate(reportDateKey)} (${REPORT_TIMEZONE}).`
+        ),
+        fields,
+        color: SPECTRUM_BLUE,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+
+  await sendDiscordWebhook(webhook, payload);
 }
 
 async function getIgnoreList(context: TriggerContext): Promise<string[]> {
@@ -485,6 +770,14 @@ async function sendModMailToWebhook(event: ModMail, context: TriggerContext) {
   };
 
   await sendDiscordWebhook(webhook, payload);
+
+  await recordDailyActivity(context, subredditName, "modmail", {
+    label: result.conversation?.subject ?? "Modmail",
+    url: modmailLink,
+  });
+  if (isPrivateNote) {
+    await recordDailyActivity(context, subredditName, "modmail_private");
+  }
 }
 
 async function sendModQueueEmbed(
@@ -498,6 +791,7 @@ async function sendModQueueEmbed(
     reason: string;
     contentPreview: string;
     isAutomod: boolean;
+    statField: DailyStatField;
   }
 ): Promise<void> {
   if (!isMonitoredSubreddit(subredditName)) {
@@ -558,6 +852,11 @@ async function sendModQueueEmbed(
   };
 
   await sendDiscordWebhook(webhook, payload);
+
+  await recordDailyActivity(context, subredditName, options.statField, {
+    label: options.title,
+    url: options.url,
+  });
 }
 
 async function sendModQueueAlertFromPostReport(
@@ -585,6 +884,7 @@ async function sendModQueueAlertFromPostReport(
     reason: event.reason,
     contentPreview,
     isAutomod: false,
+    statField: "modqueue_reported_post",
   });
 }
 
@@ -611,6 +911,7 @@ async function sendModQueueAlertFromCommentReport(
     reason: event.reason,
     contentPreview,
     isAutomod: false,
+    statField: "modqueue_reported_comment",
   });
 }
 
@@ -638,6 +939,7 @@ async function sendModQueueAlertFromAutomodPost(
     reason: event.reason,
     contentPreview,
     isAutomod: true,
+    statField: "modqueue_automod_post",
   });
 }
 
@@ -664,6 +966,7 @@ async function sendModQueueAlertFromAutomodComment(
     reason: event.reason,
     contentPreview,
     isAutomod: true,
+    statField: "modqueue_automod_comment",
   });
 }
 
@@ -741,6 +1044,11 @@ async function sendNewPostAlert(event: PostSubmit, context: TriggerContext) {
   };
 
   await sendDiscordWebhook(webhook, payload);
+
+  await recordDailyActivity(context, subredditName, "newposts", {
+    label: post.title,
+    url: postUrl,
+  });
 }
 
 export default Devvit;

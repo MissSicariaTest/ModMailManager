@@ -3,6 +3,8 @@
   "blocks": {
     "entry": "src/main.ts",
     "triggers": [
+      "onAppInstall",
+      "onAppUpgrade",
       "onModMail",
       "onPostReport",
       "onCommentReport",
