@@ -47,6 +47,12 @@ export type DiscordWebhookPayload = {
   allowed_mentions?: {
     parse?: string[];
     users?: string[];
+    roles?: string[];
+  };
+  message_reference?: {
+    message_id: string;
+    channel_id: string;
+    fail_if_not_exists?: boolean;
   };
 };
 

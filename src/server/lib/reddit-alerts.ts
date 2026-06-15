@@ -200,11 +200,66 @@ async function resolveActiveTicketForFollowUp(
     await saveTicket(ticket);
   }
 
-  if (!isActiveTicket(ticket) || !ticket.threadId) {
+  if (!isActiveTicket(ticket) || !ticket.messageId) {
     return null;
   }
 
   return ticket;
+}
+
+async function buildFollowUpPing(
+  ticket: TicketRecord,
+  pingAssignee: boolean
+): Promise<Pick<DiscordWebhookPayload, "content" | "allowed_mentions">> {
+  if (pingAssignee && ticket.status === "claimed" && ticket.assignedToId) {
+    return {
+      content: `<@${ticket.assignedToId}>`,
+      allowed_mentions: { parse: [], users: [ticket.assignedToId] },
+    };
+  }
+
+  const rolePing = ((await settings.get("rolePing")) as string | undefined)?.trim();
+  if (rolePing) {
+    return {
+      content: `<@&${rolePing}>`,
+      allowed_mentions: { parse: [], roles: [rolePing] },
+    };
+  }
+
+  return {};
+}
+
+async function ensureTicketThread(
+  ticket: TicketRecord,
+  botToken: string,
+  threadName?: string
+): Promise<string | null> {
+  if (ticket.threadId) {
+    return ticket.threadId;
+  }
+
+  if (!ticket.channelId || !ticket.messageId) {
+    return null;
+  }
+
+  const name =
+    threadName ??
+    (typeof ticket.baseEmbed.title === "string" ? ticket.baseEmbed.title : "Ticket updates");
+  const threadId = await createDiscordThreadFromMessage(
+    botToken,
+    ticket.channelId,
+    ticket.messageId,
+    name
+  );
+
+  if (!threadId) {
+    return null;
+  }
+
+  ticket.threadId = threadId;
+  await saveTicket(ticket);
+  void registerTicketWithWorker(ticket);
+  return threadId;
 }
 
 async function postTicketFollowUp(
@@ -220,7 +275,7 @@ async function postTicketFollowUp(
   }
 ): Promise<boolean> {
   const botToken = await getDiscordBotToken();
-  if (!botToken || !ticket.threadId) {
+  if (!botToken || !ticket.messageId || !ticket.channelId) {
     return false;
   }
 
@@ -246,30 +301,38 @@ async function postTicketFollowUp(
     buildTicketPayload(ticket)
   );
 
-  const pingAssignee =
-    options.pingAssignee && ticket.status === "claimed" && ticket.assignedToId
-      ? ticket.assignedToId
-      : undefined;
+  const ping = await buildFollowUpPing(ticket, options.pingAssignee ?? false);
+  const threadId = await ensureTicketThread(ticket, botToken, options.title);
+  const destinationChannelId = threadId ?? ticket.channelId;
+  const followUpEmbed = {
+    title: truncateTitle(options.title),
+    url: options.url,
+    author: {
+      name: options.authorName,
+      url: redditProfileUrl(options.authorName),
+    },
+    description: truncateField(previewText(options.preview)),
+    color: options.color,
+    timestamp: new Date().toISOString(),
+  };
 
-  await sendDiscordBotThreadMessage(botToken, ticket.threadId, {
-    content: pingAssignee ? `<@${pingAssignee}>` : undefined,
-    allowed_mentions: pingAssignee
-      ? { parse: [], users: [pingAssignee] }
-      : undefined,
-    embeds: [
-      {
-        title: truncateTitle(options.title),
-        url: options.url,
-        author: {
-          name: options.authorName,
-          url: redditProfileUrl(options.authorName),
-        },
-        description: truncateField(previewText(options.preview)),
-        color: options.color,
-        timestamp: new Date().toISOString(),
-      },
-    ],
+  const followUpMessage = await sendDiscordBotMessage(botToken, destinationChannelId, {
+    ...ping,
+    embeds: [followUpEmbed],
+    ...(threadId
+      ? {}
+      : {
+          message_reference: {
+            message_id: ticket.messageId,
+            channel_id: ticket.channelId,
+            fail_if_not_exists: false,
+          },
+        }),
   });
+
+  if (!followUpMessage) {
+    return false;
+  }
 
   await saveTicket(ticket);
   void registerTicketWithWorker(ticket);
@@ -400,8 +463,9 @@ async function sendTicketAlert(options: {
     }
   }
 
-  const shouldPersistTicket =
-    buttonsAttached || Boolean(draftTicket.threadId && options.redditKey && options.redditKeyType);
+  const shouldPersistTicket = Boolean(
+    botToken && options.redditKey && options.redditKeyType && draftTicket.messageId
+  );
 
   if (shouldPersistTicket) {
     if (options.redditKey && options.redditKeyType) {
@@ -802,14 +866,20 @@ export async function sendCommentFollowUpToTicket(event: CommentSubmit): Promise
   }
 
   const postId = toPostId(event.comment?.postId ?? event.post?.id ?? "");
-  const authorName = event.author?.name ?? event.comment?.author ?? "";
+  const authorName = event.author?.name ?? event.comment?.author ?? "Unknown";
   const body = event.comment?.body ?? "";
-  if (!postId || !authorName || !body.trim()) {
+  if (!postId || !body.trim()) {
+    console.log(
+      `Skipping comment follow-up for post "${postId || "unknown"}": missing post id or comment body.`
+    );
     return;
   }
 
   const activeTicket = await resolveActiveTicketForFollowUp("post", postId);
   if (!activeTicket) {
+    console.log(
+      `No active Discord ticket for post ${postId}. Only posts that received a new alert after the upgrade can receive comment follow-ups in-thread.`
+    );
     return;
   }
 
@@ -821,7 +891,7 @@ export async function sendCommentFollowUpToTicket(event: CommentSubmit): Promise
     console.error("Unable to resolve post URL for comment follow-up:", getErrorMessage(error));
   }
 
-  await postTicketFollowUp(activeTicket, {
+  const handled = await postTicketFollowUp(activeTicket, {
     title: "New comment",
     previewFieldName: "Post Preview",
     preview: body,
@@ -830,6 +900,12 @@ export async function sendCommentFollowUpToTicket(event: CommentSubmit): Promise
     color: POST_WHITE,
     pingAssignee: true,
   });
+
+  if (!handled) {
+    console.error(
+      `Failed to post comment follow-up for ${postId}. Confirm the Discord Bot Token is set and the bot can send messages in the alert channel.`
+    );
+  }
 }
 
 export async function trackModMailForReport(event: ModMail): Promise<void> {
