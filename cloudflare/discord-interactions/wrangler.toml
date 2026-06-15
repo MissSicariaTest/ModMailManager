@@ -1,6 +1,7 @@
 name = "modmail"
 main = "src/index.ts"
 compatibility_date = "2024-08-01"
+# Deployed via Cloudflare Git integration from cloudflare/discord-interactions
 
 # Create KV namespaces in Cloudflare Dashboard (Workers & Pages → KV),
 # then paste the IDs below before your first deploy.
