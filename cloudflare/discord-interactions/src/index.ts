@@ -317,6 +317,9 @@ type DiscordInteractionMessage = {
 
 type DiscordInteraction = {
   type: number;
+  id: string;
+  token: string;
+  application_id: string;
   member?: { user?: { id: string; username: string; global_name?: string } };
   user?: { id: string; username: string; global_name?: string };
   message?: DiscordInteractionMessage;
@@ -373,7 +376,7 @@ async function handleButton(
     })
   );
 
-  return finalizeTicketInteraction(env, ticket, updated, parsed.action);
+  return finalizeTicketInteraction(env, ticket, updated, parsed.action, interaction, ctx);
 }
 
 async function handleModal(
@@ -421,7 +424,7 @@ async function handleModal(
       console.error("Failed to track ticket action:", error);
     })
   );
-  return finalizeTicketInteraction(env, ticket, updated, "reassign", assigneeDiscordId);
+  return finalizeTicketInteraction(env, ticket, updated, "reassign", interaction, ctx, assigneeDiscordId);
 }
 
 async function saveTicket(env: Env, ticket: TicketRecord): Promise<void> {
@@ -1191,47 +1194,111 @@ function archiveActionLabel(action: TicketAction): string {
   return ACTION_FIELD_LABELS[action] ?? "Updated";
 }
 
+async function sendInteractionFollowup(
+  interaction: DiscordInteraction,
+  content: string
+): Promise<void> {
+  if (!interaction.application_id || !interaction.token) {
+    console.error("Missing interaction application_id or token for follow-up message.");
+    return;
+  }
+
+  const response = await fetch(
+    `https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        content,
+        flags: 64,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    console.error(
+      "Failed to send Discord interaction follow-up:",
+      response.status,
+      await response.text()
+    );
+  }
+}
+
 async function finalizeTicketInteraction(
   env: Env,
   previous: TicketRecord,
   updated: TicketRecord,
   action: TicketAction,
+  interaction: DiscordInteraction,
+  ctx: ExecutionContext,
   pingUserId?: string
 ): Promise<Response> {
   const botToken = env.DISCORD_BOT_TOKEN?.trim();
 
   if (action === "reopen" && previous.archived && botToken) {
-    const restored = await restoreTicketToActiveChannel(env, updated, botToken);
-    return interactionResponse(buildUpdateMessageResponse(restored, pingUserId));
+    ctx.waitUntil(
+      restoreTicketToActiveChannel(env, updated, botToken)
+        .then((restored) =>
+          sendInteractionFollowup(
+            interaction,
+            restored.archived
+              ? "Could not reopen ticket in the active channel."
+              : "Ticket reopened in the active channel."
+          )
+        )
+        .catch((error) => {
+          console.error("Reopen restore failed:", error);
+          return sendInteractionFollowup(interaction, "Could not reopen ticket.");
+        })
+    );
+    return interactionResponse(
+      ephemeral("Reopening ticket and moving it back to the active channel...")
+    );
   }
 
   if (ARCHIVE_ACTIONS.has(action)) {
-    if (!botToken) {
-      return interactionResponse(
-        ephemeral(
-          `${archiveActionLabel(action)}. Add DISCORD_BOT_TOKEN to the Cloudflare Worker to move tickets to the closed queue.`
-        )
-      );
-    }
+    const response = interactionResponse(buildUpdateMessageResponse(updated, pingUserId));
 
-    const archived = await archiveTicketToClosedChannel(env, updated, botToken);
-    if (archived.ticket.archived) {
-      return interactionResponse(
-        ephemeral(`${archiveActionLabel(action)}. Ticket moved to the closed queue.`)
-      );
-    }
+    ctx.waitUntil(
+      (async () => {
+        if (!botToken) {
+          await sendInteractionFollowup(
+            interaction,
+            `${archiveActionLabel(action)} in place. Add DISCORD_BOT_TOKEN on the Cloudflare Worker to move tickets to the closed queue.`
+          );
+          return;
+        }
 
-    if (archived.error) {
-      return interactionResponse(
-        ephemeral(`${archiveActionLabel(action)} in place. ${archived.error}`)
-      );
-    }
+        const closedWebhook = await resolveClosedWebhookCredentials(env, updated);
+        if (!closedWebhook) {
+          await sendInteractionFollowup(
+            interaction,
+            `${archiveActionLabel(action)} in place. Add Discord Webhook 7 in Reddit app settings, save changes, then try again on a new alert.`
+          );
+          return;
+        }
 
-    return interactionResponse(
-      ephemeral(
-        `${archiveActionLabel(action)} in place. Could not move the ticket to the closed queue.`
-      )
+        const result = await archiveTicketToClosedChannel(env, updated, botToken);
+        if (result.ticket.archived) {
+          await sendInteractionFollowup(
+            interaction,
+            `${archiveActionLabel(action)}. Ticket moved to the closed queue.`
+          );
+          return;
+        }
+
+        await sendInteractionFollowup(
+          interaction,
+          `${archiveActionLabel(action)} in place. ${result.error ?? "Could not move ticket."}`
+        );
+      })().catch((error) => {
+        console.error("Archive follow-up failed:", error);
+      })
     );
+
+    return response;
   }
 
   return interactionResponse(buildUpdateMessageResponse(updated, pingUserId));
