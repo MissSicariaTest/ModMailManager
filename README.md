@@ -3,7 +3,7 @@
 A Devvit app that sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to your Discord channels. It sends the message and other relevant information through a webhook payload so your team can be notified when new messages, posts, or moderation items need attention.
 
 **App:** [developers.reddit.com/apps/modmailmoderator](https://developers.reddit.com/apps/modmailmoderator)  
-**Source:** [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
+**Source:** [github.com/MissSicariaTest/ModMailManager](https://github.com/MissSicariaTest/ModMailManager)
 
 ---
 
@@ -163,7 +163,7 @@ The included Cloudflare Worker (`cloudflare/discord-interactions`) handles Disco
 
 1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) and sign in
 2. Go to **Workers and Pages** → **Create** → **Connect to Git**
-3. Select the **MissSicariaTest/Spectrum-Modmail-Bot** repository
+3. Select the **MissSicariaTest/ModMailManager** repository (or your fork)
 4. Set **Root directory** to `cloudflare/discord-interactions`
 5. Set **Build command** to `npm install && npx wrangler deploy`
 

@@ -4,7 +4,7 @@ This Cloudflare Worker handles **Discord button interactions** for ModMailModera
 
 Reddit Devvit cannot receive public inbound webhooks from Discord, so all button click handling runs in this Worker rather than the Reddit app.
 
-**Repository:** [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
+**Repository:** [github.com/MissSicariaTest/ModMailManager](https://github.com/MissSicariaTest/ModMailManager)
 
 ---
 
@@ -21,7 +21,7 @@ Before deploying, you need:
 ## Deploy via Cloudflare Git Integration
 
 1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Connect to Git**
-2. Select the **MissSicariaTest/Spectrum-Modmail-Bot** repository (or your fork)
+2. Select the **MissSicariaTest/ModMailManager** repository (or your fork)
 3. Set **Root directory** to: `cloudflare/discord-interactions`
 
 ### Build settings

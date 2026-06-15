@@ -2,7 +2,7 @@
 
 A Devvit app that sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to your Discord channels. It sends the message and other relevant information through a webhook payload so your team can be notified when new messages, posts, or moderation items need attention.
 
-Source code and full documentation: [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
+Source code and full documentation: [github.com/MissSicariaTest/ModMailManager](https://github.com/MissSicariaTest/ModMailManager)
 
 ---
 
@@ -73,4 +73,4 @@ To add interactive buttons (Claim, Close, Resolved, Unresolved, Reassign, Reopen
 4. Add the Worker URL as the Discord **Interactions Endpoint URL**
 5. Add the **Discord Bot Token**, **Application Public Key**, **Worker URL**, and **Worker Shared Secret** in the app settings
 
-Full setup guide: [github.com/MissSicariaTest/Spectrum-Modmail-Bot#advanced--discord-ticket-management-bot-optional](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot#advanced--discord-ticket-management-bot-optional)
+Full setup guide: [github.com/MissSicariaTest/ModMailManager#advanced--discord-ticket-management-bot-optional](https://github.com/MissSicariaTest/ModMailManager#advanced--discord-ticket-management-bot-optional)
