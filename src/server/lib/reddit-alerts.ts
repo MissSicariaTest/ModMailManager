@@ -238,20 +238,11 @@ async function sendTicketAlert(options: {
 
   draftTicket.messageId = message.id;
   draftTicket.channelId = message.channel_id;
-  await saveTicket(draftTicket);
 
-  if (!buttonsAttached) {
-    console.warn(
-      "Skipping Cloudflare ticket sync because the Discord message has no interactive buttons."
-    );
-    return;
-  }
-
-  const registered = await registerTicketWithWorker(draftTicket);
-  if (!registered) {
-    console.error(
-      "Discord message was sent with buttons, but Cloudflare ticket sync failed. Button clicks may show 'Ticket not found'."
-    );
+  if (buttonsAttached) {
+    await saveTicket(draftTicket);
+    // Optional background sync for daily report metrics only. Button clicks are handled in Discord.
+    void registerTicketWithWorker(draftTicket);
   }
 }
 

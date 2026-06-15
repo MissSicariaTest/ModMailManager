@@ -62,13 +62,13 @@
       },
       "discordInteractionsWorkerUrl": {
         "type": "string",
-        "label": "Cloudflare Worker URL (Discord interactions)",
-        "helpText": "Your worker URL, e.g. https://modmail.your-name.workers.dev — no trailing slash. Required so button clicks can find the ticket."
+        "label": "Cloudflare Worker URL (optional)",
+        "helpText": "Optional. Used only for daily report ticket metrics. Button actions (Claim, Close, etc.) run entirely in Discord and do not use Reddit."
       },
       "discordInteractionsWorkerSecret": {
         "type": "string",
-        "label": "Cloudflare Worker shared secret",
-        "helpText": "Must exactly match the WORKER_SECRET value in Cloudflare (Secret, not Text). Required to sync tickets from Reddit to the worker."
+        "label": "Cloudflare Worker shared secret (optional)",
+        "helpText": "Optional. Must match WORKER_SECRET in Cloudflare if you use the daily report ticket metrics."
       },
       "discordBotToken": {
         "type": "string",

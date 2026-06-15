@@ -69,18 +69,18 @@ If buttons are missing on alerts, the notification still works but ticket action
 
 | Setting | Value |
 |---------|--------|
-| `discordApplicationPublicKey` | Discord Public Key (optional backup; worker uses its own secret) |
 | `discordBotToken` | Discord Bot Token (same app as Interactions Endpoint; also set `DISCORD_BOT_TOKEN` on Worker) |
-| `discordInteractionsWorkerUrl` | Worker URL (no trailing slash) |
-| `discordInteractionsWorkerSecret` | Same string as Cloudflare `WORKER_SECRET` |
+| `discordApplicationPublicKey` | Optional backup of Discord Public Key |
+| `discordInteractionsWorkerUrl` | Optional — daily report ticket metrics only |
+| `discordInteractionsWorkerSecret` | Optional — must match Cloudflare `WORKER_SECRET` if used |
+
+Button actions (Claim, Close, Reassign, etc.) run entirely in Discord via the Cloudflare worker. Reddit only sends the initial alert embed and links.
 
 ### Why buttons may be missing
 
 Regular channel webhooks (Integrations → Webhooks in Discord) send alerts but **remove interactive buttons**.
 
 **Fix:** Add your **Discord Bot Token** in Reddit app settings and Cloudflare `DISCORD_BOT_TOKEN`. The app sends alerts through your bot so Claim/Close/Reassign buttons appear, while still using your existing webhook URLs to find the right channel.
-
-Request **`workers.dev`** in Devvit developer settings if ticket registration from Reddit fails with `PERMISSION_DENIED`.
 
 ## Manual deploy (without GitHub)
 

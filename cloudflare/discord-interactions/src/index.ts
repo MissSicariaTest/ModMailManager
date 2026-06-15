@@ -225,10 +225,34 @@ async function handleDiscordInteraction(
   }
 }
 
+type DiscordEmbedField = {
+  name: string;
+  value: string;
+  inline?: boolean;
+};
+
+type DiscordEmbedPayload = {
+  title?: string;
+  url?: string;
+  description?: string;
+  author?: { name: string; url?: string };
+  fields?: DiscordEmbedField[];
+  color?: number;
+  timestamp?: string;
+  footer?: { text: string };
+};
+
+type DiscordInteractionMessage = {
+  id: string;
+  channel_id: string;
+  embeds?: DiscordEmbedPayload[];
+};
+
 type DiscordInteraction = {
   type: number;
   member?: { user?: { id: string; username: string; global_name?: string } };
   user?: { id: string; username: string; global_name?: string };
+  message?: DiscordInteractionMessage;
   data?: {
     custom_id?: string;
     components?: Array<{ components?: Array<{ value?: string }> }>;
@@ -255,12 +279,10 @@ async function handleButton(
     return interactionResponse(ephemeral("Unable to identify Discord user."));
   }
 
-  const ticket = await getTicketWithRetry(env, parsed.ticketId);
+  const ticket = await resolveTicketForInteraction(env, interaction, parsed.ticketId);
   if (!ticket) {
     return interactionResponse(
-      ephemeral(
-        "Ticket not found. Save Cloudflare Worker URL and shared secret in Reddit app settings (must match Cloudflare WORKER_SECRET), then trigger a new alert and click Claim on that message."
-      )
+      ephemeral("Unable to load this Discord alert. Try clicking the button again.")
     );
   }
 
@@ -309,9 +331,9 @@ async function handleModal(
     return interactionResponse(ephemeral("Unable to identify Discord user."));
   }
 
-  const ticket = await getTicket(env, ticketId);
+  const ticket = await resolveTicketForInteraction(env, interaction, ticketId);
   if (!ticket) {
-    return interactionResponse(ephemeral("Ticket not found."));
+    return interactionResponse(ephemeral("Unable to load this Discord alert."));
   }
 
   const err = isTicketActionAllowed(ticket, "reassign");
@@ -357,6 +379,130 @@ async function getTicketWithRetry(env: Env, ticketId: string): Promise<TicketRec
   await new Promise((resolve) => setTimeout(resolve, 400));
   ticket = await getTicket(env, ticketId);
   return ticket;
+}
+
+function parseStatusLabel(label: string): TicketStatus {
+  const normalized = label.trim().toLowerCase();
+  if (normalized === "claimed") return "claimed";
+  if (normalized === "closed") return "closed";
+  if (normalized === "resolved") return "resolved";
+  if (normalized === "unresolved") return "unresolved";
+  return "open";
+}
+
+function parseSubredditGroup(subredditValue: string): string {
+  const normalized = subredditValue.replace(/^r\//i, "").trim().toLowerCase();
+  if (normalized === "spectrum_official") {
+    return "spectrum_official";
+  }
+  return "spectrum";
+}
+
+function parseActionLogFromFields(fields: DiscordEmbedField[]): TicketActionLog[] {
+  const labelToAction = new Map(
+    Object.entries(ACTION_FIELD_LABELS).map(([action, label]) => [label, action])
+  );
+
+  return fields
+    .map((field) => {
+      const action = labelToAction.get(field.name);
+      if (!action) {
+        return null;
+      }
+
+      const reassignedMatch = field.value.match(/^(.+?) → (.+?) \((.+)\)$/);
+      if (reassignedMatch) {
+        return {
+          action,
+          discordUserId: "",
+          discordUsername: reassignedMatch[1],
+          timestamp: reassignedMatch[3],
+          details: reassignedMatch[2],
+        };
+      }
+
+      const simpleMatch = field.value.match(/^(.+?) \((.+)\)$/);
+      if (!simpleMatch) {
+        return null;
+      }
+
+      return {
+        action,
+        discordUserId: "",
+        discordUsername: simpleMatch[1],
+        timestamp: simpleMatch[2],
+      };
+    })
+    .filter((entry): entry is TicketActionLog => entry !== null);
+}
+
+function bootstrapTicketFromInteraction(
+  interaction: DiscordInteraction,
+  ticketId: string
+): TicketRecord | null {
+  const message = interaction.message;
+  const embed = message?.embeds?.[0];
+  if (!message?.id || !message.channel_id || !embed) {
+    return null;
+  }
+
+  const fields = embed.fields ?? [];
+  const actionFieldNames = new Set(Object.values(ACTION_FIELD_LABELS));
+  const baseFields = fields.filter(
+    (field) =>
+      field.name !== "Status" &&
+      field.name !== "Assigned To" &&
+      !actionFieldNames.has(field.name)
+  );
+  const statusField = fields.find((field) => field.name === "Status");
+  const assignedField = fields.find((field) => field.name === "Assigned To");
+  const subredditField = fields.find((field) => field.name === "Subreddit");
+  const now = new Date().toISOString();
+
+  return {
+    id: ticketId,
+    source: "modmail",
+    subreddit: parseSubredditGroup(subredditField?.value ?? ""),
+    status: parseStatusLabel(statusField?.value ?? "Open"),
+    assignedTo: assignedField?.value,
+    webhookId: "",
+    webhookToken: "",
+    messageId: message.id,
+    channelId: message.channel_id,
+    baseEmbed: {
+      title: embed.title,
+      url: embed.url,
+      description: embed.description,
+      author: embed.author,
+      fields: baseFields,
+      color: embed.color,
+      timestamp: embed.timestamp,
+      footer: embed.footer,
+    },
+    baseColor: embed.color ?? STATUS_COLORS.open,
+    actionLog: parseActionLogFromFields(fields),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function resolveTicketForInteraction(
+  env: Env,
+  interaction: DiscordInteraction,
+  ticketId: string
+): Promise<TicketRecord | null> {
+  const existing = await getTicketWithRetry(env, ticketId);
+  if (existing) {
+    return existing;
+  }
+
+  const bootstrapped = bootstrapTicketFromInteraction(interaction, ticketId);
+  if (!bootstrapped) {
+    return null;
+  }
+
+  await saveTicket(env, bootstrapped);
+  return bootstrapped;
 }
 
 async function applyTicketAction(
