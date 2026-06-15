@@ -1,18 +1,101 @@
 {
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "modmailtodiscord",
-  "blocks": {
-    "entry": "src/main.ts",
-    "triggers": [
-      "onAppInstall",
-      "onAppUpgrade",
-      "onModMail",
-      "onModAction",
-      "onCommentSubmit",
-      "onPostReport",
-      "onCommentReport",
-      "onAutomoderatorFilterPost",
-      "onAutomoderatorFilterComment",
-      "onPostSubmit"
-    ]
+  "server": {
+    "dir": "dist/server",
+    "entry": "index.cjs"
+  },
+  "permissions": {
+    "http": {
+      "enable": true,
+      "domains": ["discord.com"]
+    },
+    "redis": true,
+    "reddit": {
+      "enable": true,
+      "scope": "moderator"
+    }
+  },
+  "settings": {
+    "subreddit": {
+      "spectrumModmailWebhook": {
+        "type": "string",
+        "label": "Webhook URL for r/Spectrum modmail alerts"
+      },
+      "spectrumOfficialModmailWebhook": {
+        "type": "string",
+        "label": "Webhook URL for r/Spectrum_Official modmail alerts"
+      },
+      "spectrumModQueueWebhook": {
+        "type": "string",
+        "label": "Webhook URL for r/Spectrum mod queue alerts"
+      },
+      "spectrumOfficialModQueueWebhook": {
+        "type": "string",
+        "label": "Webhook URL for r/Spectrum_Official mod queue alerts"
+      },
+      "spectrumNewPostsWebhook": {
+        "type": "string",
+        "label": "Webhook URL for r/Spectrum new posts alerts"
+      },
+      "spectrumOfficialNewPostsWebhook": {
+        "type": "string",
+        "label": "Webhook URL for r/Spectrum_Official new posts alerts"
+      },
+      "reportingWebhook": {
+        "type": "string",
+        "label": "Webhook URL for the shared daily reporting channel"
+      },
+      "discordApplicationPublicKey": {
+        "type": "string",
+        "label": "Discord Application Public Key",
+        "helpText": "Required for interactive buttons. Find this in the Discord Developer Portal under your app's General Information. Set the Interactions Endpoint URL to https://modmailtodiscord.reddit.com/api/discord/interactions (replace with your app slug if different). Webhooks must be created under the same Discord application."
+      },
+      "outgoing": {
+        "type": "boolean",
+        "label": "Send outgoing mod messages to Discord",
+        "defaultValue": true
+      },
+      "ignoreUsers": {
+        "type": "string",
+        "label": "Ignore list (comma-separated usernames, don't include u/)",
+        "helpText": "Add Reddit usernames (case-insensitive) separated by commas to skip them from webhook payloads."
+      },
+      "rolePing": {
+        "type": "string",
+        "label": "Discord Role ID to Ping",
+        "helpText": "Enter a Discord Role ID to ping when a message is sent. Leave blank to disable."
+      },
+      "onlyModDiscussions": {
+        "type": "boolean",
+        "label": "Only Sync Mod Discussions",
+        "helpText": "If enabled, only mod discussion messages will be sent to the webhook.",
+        "defaultValue": false
+      }
+    }
+  },
+  "scheduler": {
+    "tasks": {
+      "dailyReport": {
+        "endpoint": "/internal/scheduler/daily-report",
+        "cron": "0 * * * *"
+      }
+    }
+  },
+  "triggers": {
+    "onAppInstall": "/internal/triggers/on-app-install",
+    "onAppUpgrade": "/internal/triggers/on-app-upgrade",
+    "onModMail": "/internal/triggers/on-mod-mail",
+    "onPostReport": "/internal/triggers/on-mod-queue",
+    "onCommentReport": "/internal/triggers/on-mod-queue",
+    "onAutomoderatorFilterPost": "/internal/triggers/on-mod-queue",
+    "onAutomoderatorFilterComment": "/internal/triggers/on-mod-queue",
+    "onPostSubmit": "/internal/triggers/on-post-submit",
+    "onCommentSubmit": "/internal/triggers/on-comment-submit",
+    "onModAction": "/internal/triggers/on-mod-action"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
   }
 }
