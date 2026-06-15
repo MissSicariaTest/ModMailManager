@@ -3,6 +3,7 @@ import type { MonitoredSubreddit } from "./subreddit.js";
 export type WebhookCategory = "modmail" | "modqueue" | "newposts";
 export type TicketSource = WebhookCategory;
 export type TicketStatus = "open" | "claimed" | "closed" | "resolved" | "unresolved";
+export type RedditTicketKeyType = "modmail" | "post";
 
 export type DiscordEmbedField = {
   name: string;
@@ -43,6 +44,10 @@ export type DiscordWebhookPayload = {
   content?: string;
   embeds: DiscordEmbed[];
   components?: DiscordActionRow[];
+  allowed_mentions?: {
+    parse?: string[];
+    users?: string[];
+  };
 };
 
 export type DiscordWebhookMessage = {
@@ -70,6 +75,16 @@ export type TicketRecord = {
   webhookToken: string;
   messageId: string;
   channelId: string;
+  threadId?: string;
+  redditKey?: string;
+  redditKeyType?: RedditTicketKeyType;
+  archived?: boolean;
+  activeWebhookId?: string;
+  activeWebhookToken?: string;
+  activeChannelId?: string;
+  activeMessageId?: string;
+  closedWebhookId?: string;
+  closedWebhookToken?: string;
   baseEmbed: DiscordEmbed;
   baseColor: number;
   content?: string;

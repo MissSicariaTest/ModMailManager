@@ -24,6 +24,9 @@ export const DAILY_REPORT_REDIS_KEY = "dailyReport:data";
 export const DAILY_REPORT_SENT_REDIS_KEY = "dailyReport:lastSentDate";
 export const TICKET_REDIS_PREFIX = "ticket:";
 export const OPEN_TICKETS_REDIS_KEY = "tickets:open";
+export const REDDIT_TICKET_MAP_PREFIX = "ticket:reddit:";
+
+export const TERMINAL_TICKET_STATUSES = new Set(["closed", "resolved", "unresolved"]);
 
 export const MONITORED_SUBREDDITS = ["spectrum", "spectrum_official"] as const;
 export const PLAYTEST_SUBREDDIT = "modmailmanager_dev";

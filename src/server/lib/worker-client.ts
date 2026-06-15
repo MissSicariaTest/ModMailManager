@@ -22,6 +22,30 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export async function fetchTicketFromWorker(ticketId: string): Promise<TicketRecord | null> {
+  const config = await getWorkerConfig();
+  if (!config) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${config.url}/api/tickets/${encodeURIComponent(ticketId)}`, {
+      headers: {
+        Authorization: `Bearer ${config.secret}`,
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as TicketRecord;
+  } catch (error) {
+    console.error("Worker ticket fetch error:", getErrorMessage(error));
+    return null;
+  }
+}
+
 export async function registerTicketWithWorker(ticket: TicketRecord): Promise<boolean> {
   const config = await getWorkerConfig();
   if (!config) {

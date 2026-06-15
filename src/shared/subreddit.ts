@@ -37,6 +37,17 @@ export function getMonitoredSubredditKey(
   return resolveSubredditGroup(subredditName);
 }
 
+export function getClosedWebhookSettingName(subredditName: string): string | null {
+  const group = resolveSubredditGroup(subredditName);
+  if (!group) {
+    return null;
+  }
+
+  return group === "spectrum"
+    ? "spectrumClosedTicketsWebhook"
+    : "spectrumOfficialClosedTicketsWebhook";
+}
+
 export function getWebhookSettingName(
   subredditName: string,
   category: WebhookCategory

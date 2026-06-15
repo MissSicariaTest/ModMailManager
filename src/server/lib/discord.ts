@@ -214,26 +214,153 @@ export async function getWebhookChannelId(
 export async function sendDiscordBotMessage(
   botToken: string,
   channelId: string,
-  payload: DiscordWebhookPayload
+  payload: DiscordWebhookPayload,
+  options?: { threadName?: string }
 ): Promise<DiscordWebhookMessage | null> {
+  const body: Record<string, unknown> = { ...payload };
+  if (options?.threadName) {
+    body.thread_name = truncateTitle(options.threadName).slice(0, 100);
+  }
+
   const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bot ${botToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
+    const responseBody = await response.text().catch(() => "");
     console.error(
-      `Error sending bot message to Discord: ${response.status} ${response.statusText} ${body}`
+      `Error sending bot message to Discord: ${response.status} ${response.statusText} ${responseBody}`
     );
     return null;
   }
 
   return (await response.json()) as DiscordWebhookMessage;
+}
+
+export async function createDiscordThreadFromMessage(
+  botToken: string,
+  channelId: string,
+  messageId: string,
+  threadName: string
+): Promise<string | null> {
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/threads`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: truncateTitle(threadName).slice(0, 100),
+        auto_archive_duration: 10080,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const responseBody = await response.text().catch(() => "");
+    console.error(
+      `Error creating Discord thread: ${response.status} ${response.statusText} ${responseBody}`
+    );
+    return null;
+  }
+
+  const thread = (await response.json()) as { id?: string };
+  return thread.id ?? null;
+}
+
+export async function sendDiscordBotThreadMessage(
+  botToken: string,
+  threadId: string,
+  payload: DiscordWebhookPayload
+): Promise<DiscordWebhookMessage | null> {
+  return sendDiscordBotMessage(botToken, threadId, payload);
+}
+
+export async function editDiscordBotMessage(
+  botToken: string,
+  channelId: string,
+  messageId: string,
+  payload: DiscordWebhookPayload
+): Promise<boolean> {
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    const responseBody = await response.text().catch(() => "");
+    console.error(
+      `Error editing Discord bot message: ${response.status} ${response.statusText} ${responseBody}`
+    );
+    return false;
+  }
+
+  return true;
+}
+
+export async function deleteDiscordMessage(
+  botToken: string,
+  channelId: string,
+  messageId: string
+): Promise<boolean> {
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    }
+  );
+
+  if (!response.ok && response.status !== 404) {
+    const responseBody = await response.text().catch(() => "");
+    console.error(
+      `Error deleting Discord message: ${response.status} ${response.statusText} ${responseBody}`
+    );
+    return false;
+  }
+
+  return true;
+}
+
+export async function archiveDiscordThread(
+  botToken: string,
+  threadId: string,
+  archived = true
+): Promise<boolean> {
+  const response = await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ archived }),
+  });
+
+  if (!response.ok) {
+    const responseBody = await response.text().catch(() => "");
+    console.error(
+      `Error updating Discord thread archive state: ${response.status} ${response.statusText} ${responseBody}`
+    );
+    return false;
+  }
+
+  return true;
 }
 
 export function buildWebhookRequestUrl(

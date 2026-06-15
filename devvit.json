@@ -51,6 +51,16 @@
         "label": "Discord Webhook 6 — New Posts",
         "helpText": "New post alerts for your secondary community. Falls back to Webhook 2 if left blank."
       },
+      "spectrumClosedTicketsWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 7 — Closed Tickets",
+        "helpText": "When a ticket is closed or resolved, its embed is removed from the active channel and reposted here. Requires Discord Bot Token."
+      },
+      "spectrumOfficialClosedTicketsWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 8 — Closed Tickets",
+        "helpText": "Closed and resolved tickets for your secondary community. Requires Discord Bot Token."
+      },
       "reportingWebhook": {
         "type": "string",
         "label": "Webhook URL for the shared daily reporting channel"

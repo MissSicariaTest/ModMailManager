@@ -13,6 +13,7 @@ import type { TriggerResponse } from "@devvit/web/shared";
 import { safeTrack } from "../lib/reporting.js";
 import {
   sendModMailToWebhook,
+  sendCommentFollowUpToTicket,
   sendModQueueAlertFromAutomodComment,
   sendModQueueAlertFromAutomodPost,
   sendModQueueAlertFromCommentReport,
@@ -106,6 +107,7 @@ triggers.post("/on-post-submit", async (c) => {
 triggers.post("/on-comment-submit", async (c) => {
   try {
     const event = await c.req.json<CommentSubmit>();
+    await sendCommentFollowUpToTicket(event);
     await safeTrack(() => trackCommentSubmitForReport(event));
     return c.json(success("Comment tracking processed."), 200);
   } catch (err) {

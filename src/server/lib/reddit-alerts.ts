@@ -20,6 +20,7 @@ import {
 } from "../../shared/constants.js";
 import {
   getMonitoredSubredditKey,
+  getClosedWebhookSettingName,
   getWebhookSettingName,
   isMonitoredSubreddit,
   normalizeSubredditName,
@@ -28,6 +29,7 @@ import {
 import type {
   DiscordEmbed,
   DiscordEmbedField,
+  RedditTicketKeyType,
   TicketRecord,
   TicketSource,
   WebhookCategory,
@@ -35,7 +37,10 @@ import type {
 import {
   buildTicketButtons,
   buildTicketEmbed,
+  buildTicketPayload,
+  createDiscordThreadFromMessage,
   createTicketId,
+  editDiscordBotMessage,
   getErrorMessage,
   getWebhookChannelId,
   isDiscordWebhook,
@@ -45,6 +50,7 @@ import {
   redditPermalinkUrl,
   redditProfileUrl,
   sendDiscordBotMessage,
+  sendDiscordBotThreadMessage,
   sendDiscordWebhook,
   sleep,
   truncateField,
@@ -55,8 +61,15 @@ import {
   getMetrics,
   saveDailyReportStore,
 } from "./reporting.js";
-import { saveTicket } from "./tickets.js";
-import { registerTicketWithWorker } from "./worker-client.js";
+import {
+  getTicket,
+  getTicketIdForRedditKey,
+  isActiveTicket,
+  linkRedditKeyToTicket,
+  saveTicket,
+  unlinkRedditKey,
+} from "./tickets.js";
+import { fetchTicketFromWorker, registerTicketWithWorker } from "./worker-client.js";
 
 function toPostId(id: string): `t3_${string}` {
   return (id.startsWith("t3_") ? id : `t3_${id}`) as `t3_${string}`;
@@ -143,6 +156,126 @@ async function getNewAccountWarning(username: string): Promise<string | undefine
   }
 }
 
+async function getClosedWebhookUrl(subredditName: string): Promise<string | null> {
+  const settingName = getClosedWebhookSettingName(subredditName);
+  if (!settingName) {
+    return null;
+  }
+
+  const webhook = (await settings.get(settingName)) as string | undefined;
+  if (!webhook) {
+    return null;
+  }
+
+  if (!isDiscordWebhook(webhook)) {
+    console.error(`Setting "${settingName}" is not a valid Discord webhook URL`);
+    return null;
+  }
+
+  return webhook;
+}
+
+async function getDiscordBotToken(): Promise<string | null> {
+  const botToken = ((await settings.get("discordBotToken")) as string | undefined)?.trim();
+  return botToken || null;
+}
+
+async function resolveActiveTicketForFollowUp(
+  type: RedditTicketKeyType,
+  redditKey: string
+): Promise<TicketRecord | null> {
+  const ticketId = await getTicketIdForRedditKey(type, redditKey);
+  if (!ticketId) {
+    return null;
+  }
+
+  let ticket = await getTicket(ticketId);
+  if (!ticket) {
+    return null;
+  }
+
+  const workerTicket = await fetchTicketFromWorker(ticketId);
+  if (workerTicket) {
+    ticket = workerTicket;
+    await saveTicket(ticket);
+  }
+
+  if (!isActiveTicket(ticket) || !ticket.threadId) {
+    return null;
+  }
+
+  return ticket;
+}
+
+async function postTicketFollowUp(
+  ticket: TicketRecord,
+  options: {
+    title: string;
+    previewFieldName: string;
+    preview: string;
+    authorName: string;
+    url?: string;
+    color: number;
+    pingAssignee?: boolean;
+  }
+): Promise<boolean> {
+  const botToken = await getDiscordBotToken();
+  if (!botToken || !ticket.threadId) {
+    return false;
+  }
+
+  const fields = [...(ticket.baseEmbed.fields ?? [])];
+  const previewIndex = fields.findIndex((field) => field.name === options.previewFieldName);
+  if (previewIndex >= 0) {
+    fields[previewIndex] = {
+      ...fields[previewIndex],
+      value: truncateField(previewText(options.preview)),
+    };
+  }
+
+  ticket.baseEmbed = {
+    ...ticket.baseEmbed,
+    fields,
+  };
+  ticket.updatedAt = new Date().toISOString();
+
+  await editDiscordBotMessage(
+    botToken,
+    ticket.channelId,
+    ticket.messageId,
+    buildTicketPayload(ticket)
+  );
+
+  const pingAssignee =
+    options.pingAssignee && ticket.status === "claimed" && ticket.assignedToId
+      ? ticket.assignedToId
+      : undefined;
+
+  await sendDiscordBotThreadMessage(botToken, ticket.threadId, {
+    content: pingAssignee ? `<@${pingAssignee}>` : undefined,
+    allowed_mentions: pingAssignee
+      ? { parse: [], users: [pingAssignee] }
+      : undefined,
+    embeds: [
+      {
+        title: truncateTitle(options.title),
+        url: options.url,
+        author: {
+          name: options.authorName,
+          url: redditProfileUrl(options.authorName),
+        },
+        description: truncateField(previewText(options.preview)),
+        color: options.color,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  });
+
+  await saveTicket(ticket);
+  void registerTicketWithWorker(ticket);
+  return true;
+}
+
 async function sendTicketAlert(options: {
   webhook: string;
   source: TicketSource;
@@ -150,6 +283,9 @@ async function sendTicketAlert(options: {
   embed: DiscordEmbed;
   baseColor: number;
   content?: string;
+  redditKey?: string;
+  redditKeyType?: RedditTicketKeyType;
+  threadName?: string;
 }): Promise<void> {
   const parsed = parseWebhookUrl(options.webhook);
   if (!parsed) {
@@ -162,6 +298,13 @@ async function sendTicketAlert(options: {
     return;
   }
 
+  if (options.redditKey && options.redditKeyType) {
+    await unlinkRedditKey(options.redditKeyType, options.redditKey);
+  }
+
+  const closedWebhook = await getClosedWebhookUrl(options.subredditName);
+  const closedParsed = closedWebhook ? parseWebhookUrl(closedWebhook) : null;
+
   const ticketId = createTicketId();
   const now = new Date().toISOString();
   const draftTicket: TicketRecord = {
@@ -173,6 +316,10 @@ async function sendTicketAlert(options: {
     webhookToken: parsed.token,
     messageId: "",
     channelId: "",
+    redditKey: options.redditKey,
+    redditKeyType: options.redditKeyType,
+    closedWebhookId: closedParsed?.id,
+    closedWebhookToken: closedParsed?.token,
     baseEmbed: options.embed,
     baseColor: options.baseColor,
     content: options.content,
@@ -187,7 +334,7 @@ async function sendTicketAlert(options: {
     components: buildTicketButtons(ticketId, "open"),
   };
 
-  const botToken = ((await settings.get("discordBotToken")) as string | undefined)?.trim();
+  const botToken = await getDiscordBotToken();
   let message: Awaited<ReturnType<typeof sendDiscordWebhook>> = null;
   let buttonsAttached = false;
 
@@ -239,9 +386,28 @@ async function sendTicketAlert(options: {
   draftTicket.messageId = message.id;
   draftTicket.channelId = message.channel_id;
 
-  if (buttonsAttached) {
+  if (botToken && options.threadName) {
+    const threadId = await createDiscordThreadFromMessage(
+      botToken,
+      draftTicket.channelId,
+      draftTicket.messageId,
+      options.threadName
+    );
+    if (threadId) {
+      draftTicket.threadId = threadId;
+    } else {
+      console.error("Failed to create Discord thread for ticket follow-ups.");
+    }
+  }
+
+  const shouldPersistTicket =
+    buttonsAttached || Boolean(draftTicket.threadId && options.redditKey && options.redditKeyType);
+
+  if (shouldPersistTicket) {
+    if (options.redditKey && options.redditKeyType) {
+      await linkRedditKeyToTicket(options.redditKeyType, options.redditKey, draftTicket.id);
+    }
     await saveTicket(draftTicket);
-    // Optional background sync for daily report metrics only. Button clicks are handled in Discord.
     void registerTicketWithWorker(draftTicket);
   }
 }
@@ -310,6 +476,24 @@ export async function sendModMailToWebhook(event: ModMail): Promise<void> {
     return;
   }
 
+  if (conversationId) {
+    const activeTicket = await resolveActiveTicketForFollowUp("modmail", conversationId);
+    if (activeTicket) {
+      const handled = await postTicketFollowUp(activeTicket, {
+        title: isPrivateNote ? "New mod note" : "New modmail reply",
+        previewFieldName: "Message Preview",
+        preview: body,
+        authorName,
+        url: modmailLink,
+        color: isPrivateNote ? PRIVATE_NOTE_GREEN : SPECTRUM_BLUE,
+        pingAssignee: participatingAs !== "moderator",
+      });
+      if (handled) {
+        return;
+      }
+    }
+  }
+
   const displaySubreddit = normalizeSubredditName(subredditName);
   const embed: DiscordEmbed = {
     title: truncateTitle(result.conversation?.subject ?? "Modmail"),
@@ -350,6 +534,9 @@ export async function sendModMailToWebhook(event: ModMail): Promise<void> {
     embed,
     baseColor: isPrivateNote ? PRIVATE_NOTE_GREEN : SPECTRUM_BLUE,
     content: rolePing ? `<@&${rolePing}>` : undefined,
+    redditKey: conversationId,
+    redditKeyType: "modmail",
+    threadName: result.conversation?.subject ?? "Modmail",
   });
 }
 
@@ -585,6 +772,7 @@ export async function sendNewPostAlert(event: PostSubmit): Promise<void> {
   }
 
   const color = flairText ? SPECTRUM_BLUE : POST_WHITE;
+  const postId = toPostId(post.id);
   await sendTicketAlert({
     webhook,
     source: "newposts",
@@ -601,6 +789,46 @@ export async function sendNewPostAlert(event: PostSubmit): Promise<void> {
       timestamp: new Date().toISOString(),
     },
     baseColor: color,
+    redditKey: postId,
+    redditKeyType: "post",
+    threadName: post.title,
+  });
+}
+
+export async function sendCommentFollowUpToTicket(event: CommentSubmit): Promise<void> {
+  const subredditName = event.subreddit?.name ?? "";
+  if (!subredditName || !isMonitoredSubreddit(subredditName)) {
+    return;
+  }
+
+  const postId = toPostId(event.comment?.postId ?? event.post?.id ?? "");
+  const authorName = event.author?.name ?? event.comment?.author ?? "";
+  const body = event.comment?.body ?? "";
+  if (!postId || !authorName || !body.trim()) {
+    return;
+  }
+
+  const activeTicket = await resolveActiveTicketForFollowUp("post", postId);
+  if (!activeTicket) {
+    return;
+  }
+
+  let postUrl: string | undefined;
+  try {
+    const post = await reddit.getPostById(postId);
+    postUrl = redditPermalinkUrl(post.permalink);
+  } catch (error) {
+    console.error("Unable to resolve post URL for comment follow-up:", getErrorMessage(error));
+  }
+
+  await postTicketFollowUp(activeTicket, {
+    title: "New comment",
+    previewFieldName: "Post Preview",
+    preview: body,
+    authorName,
+    url: postUrl,
+    color: POST_WHITE,
+    pingAssignee: true,
   });
 }
 

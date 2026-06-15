@@ -1,9 +1,12 @@
 import { redis } from "@devvit/web/server";
 import {
   OPEN_TICKETS_REDIS_KEY,
+  REDDIT_TICKET_MAP_PREFIX,
+  TERMINAL_TICKET_STATUSES,
   TICKET_REDIS_PREFIX,
 } from "../../shared/constants.js";
 import type {
+  RedditTicketKeyType,
   TicketActionLog,
   TicketRecord,
   TicketStatus,
@@ -13,6 +16,44 @@ import type { MonitoredSubreddit } from "../../shared/subreddit.js";
 
 function ticketKey(ticketId: string): string {
   return `${TICKET_REDIS_PREFIX}${ticketId}`;
+}
+
+function redditTicketMapKey(type: RedditTicketKeyType, redditKey: string): string {
+  return `${REDDIT_TICKET_MAP_PREFIX}${type}:${redditKey}`;
+}
+
+export function isActiveTicket(ticket: TicketRecord): boolean {
+  if (ticket.archived) {
+    return false;
+  }
+  return ticket.status === "open" || ticket.status === "claimed";
+}
+
+export function isTerminalTicketStatus(status: TicketStatus): boolean {
+  return TERMINAL_TICKET_STATUSES.has(status);
+}
+
+export async function linkRedditKeyToTicket(
+  type: RedditTicketKeyType,
+  redditKey: string,
+  ticketId: string
+): Promise<void> {
+  await redis.set(redditTicketMapKey(type, redditKey), ticketId);
+}
+
+export async function unlinkRedditKey(
+  type: RedditTicketKeyType,
+  redditKey: string
+): Promise<void> {
+  await redis.del(redditTicketMapKey(type, redditKey));
+}
+
+export async function getTicketIdForRedditKey(
+  type: RedditTicketKeyType,
+  redditKey: string
+): Promise<string | null> {
+  const ticketId = await redis.get(redditTicketMapKey(type, redditKey));
+  return ticketId ?? null;
 }
 
 export async function saveTicket(ticket: TicketRecord): Promise<void> {

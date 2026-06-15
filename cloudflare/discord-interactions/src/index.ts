@@ -43,6 +43,16 @@ type TicketRecord = {
   webhookToken: string;
   messageId: string;
   channelId: string;
+  threadId?: string;
+  redditKey?: string;
+  redditKeyType?: "modmail" | "post";
+  archived?: boolean;
+  activeWebhookId?: string;
+  activeWebhookToken?: string;
+  activeChannelId?: string;
+  activeMessageId?: string;
+  closedWebhookId?: string;
+  closedWebhookToken?: string;
   baseEmbed: Record<string, unknown>;
   baseColor: number;
   content?: string;
@@ -50,6 +60,8 @@ type TicketRecord = {
   createdAt: string;
   updatedAt: string;
 };
+
+const ARCHIVE_ACTIONS = new Set<TicketAction>(["close", "resolved", "unresolved"]);
 
 const TICKET_ACTIONS: TicketAction[] = [
   "claim",
@@ -100,6 +112,13 @@ export default {
       return registerTicket(request, env);
     }
 
+    if (request.method === "GET" && url.pathname.startsWith("/api/tickets/")) {
+      const ticketId = decodeURIComponent(url.pathname.replace("/api/tickets/", ""));
+      if (ticketId && ticketId !== "register") {
+        return getTicketById(request, env, ticketId);
+      }
+    }
+
     if (request.method === "GET" && url.pathname === "/api/report/snapshot") {
       return getReportSnapshot(request, env);
     }
@@ -143,6 +162,19 @@ function getHealthStatus(env: Env): Response {
       DISCORD_BOT_TOKEN: isSecretConfigured(env.DISCORD_BOT_TOKEN),
     },
   });
+}
+
+async function getTicketById(request: Request, env: Env, ticketId: string): Promise<Response> {
+  if (!authorizeWorker(request, env)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const ticket = await getTicket(env, ticketId);
+  if (!ticket) {
+    return Response.json({ error: "Ticket not found" }, { status: 404 });
+  }
+
+  return Response.json(ticket);
 }
 
 async function registerTicket(request: Request, env: Env): Promise<Response> {
@@ -309,7 +341,8 @@ async function handleButton(
       console.error("Failed to track ticket action:", error);
     })
   );
-  return interactionResponse(buildUpdateMessageResponse(updated));
+
+  return finalizeTicketInteraction(env, ticket, updated, parsed.action);
 }
 
 async function handleModal(
@@ -357,11 +390,15 @@ async function handleModal(
       console.error("Failed to track ticket action:", error);
     })
   );
-  return interactionResponse(buildUpdateMessageResponse(updated, assigneeDiscordId));
+  return finalizeTicketInteraction(env, ticket, updated, "reassign", assigneeDiscordId);
 }
 
 async function saveTicket(env: Env, ticket: TicketRecord): Promise<void> {
   await env.TICKETS.put(`ticket:${ticket.id}`, JSON.stringify(ticket));
+
+  if (ticket.redditKey && ticket.redditKeyType) {
+    await env.TICKETS.put(`reddit:${ticket.redditKeyType}:${ticket.redditKey}`, ticket.id);
+  }
 
   const openRaw = (await env.TICKETS.get(OPEN_TICKETS_KEY)) ?? "{}";
   const openMap = JSON.parse(openRaw) as Record<string, string>;
@@ -839,6 +876,231 @@ function buildUpdateMessageResponse(ticket: TicketRecord, pingUserId?: string): 
       components: buildTicketButtons(ticket.id, ticket.status),
     },
   };
+}
+
+async function getWebhookChannelId(webhookId: string, webhookToken: string): Promise<string | null> {
+  const response = await fetch(`https://discord.com/api/v10/webhooks/${webhookId}/${webhookToken}`);
+  if (!response.ok) {
+    return null;
+  }
+  const data = (await response.json()) as { channel_id?: string };
+  return data.channel_id ?? null;
+}
+
+async function sendDiscordBotMessage(
+  botToken: string,
+  channelId: string,
+  payload: Record<string, unknown>
+): Promise<{ id: string; channel_id: string } | null> {
+  const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    console.error("Failed to send Discord bot message:", response.status, await response.text());
+    return null;
+  }
+
+  return (await response.json()) as { id: string; channel_id: string };
+}
+
+async function deleteDiscordMessage(
+  botToken: string,
+  channelId: string,
+  messageId: string
+): Promise<boolean> {
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    }
+  );
+
+  return response.ok || response.status === 404;
+}
+
+async function archiveDiscordThread(botToken: string, threadId: string): Promise<void> {
+  await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ archived: true }),
+  });
+}
+
+async function createDiscordThreadFromMessage(
+  botToken: string,
+  channelId: string,
+  messageId: string,
+  threadName: string
+): Promise<string | null> {
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/threads`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: threadName.slice(0, 100),
+        auto_archive_duration: 10080,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    console.error("Failed to create Discord thread:", response.status, await response.text());
+    return null;
+  }
+
+  const thread = (await response.json()) as { id?: string };
+  return thread.id ?? null;
+}
+
+function buildTicketMessagePayload(ticket: TicketRecord): Record<string, unknown> {
+  return {
+    embeds: [buildTicketEmbed(ticket)],
+    components: buildTicketButtons(ticket.id, ticket.status),
+  };
+}
+
+async function archiveTicketToClosedChannel(
+  env: Env,
+  ticket: TicketRecord,
+  botToken: string
+): Promise<TicketRecord> {
+  if (ticket.archived || !ticket.closedWebhookId || !ticket.closedWebhookToken) {
+    return ticket;
+  }
+
+  const closedChannelId = await getWebhookChannelId(
+    ticket.closedWebhookId,
+    ticket.closedWebhookToken
+  );
+  if (!closedChannelId) {
+    return ticket;
+  }
+
+  const activeChannelId = ticket.channelId;
+  const activeMessageId = ticket.messageId;
+  const archivedMessage = await sendDiscordBotMessage(
+    botToken,
+    closedChannelId,
+    buildTicketMessagePayload(ticket)
+  );
+  if (!archivedMessage) {
+    return ticket;
+  }
+
+  if (ticket.threadId) {
+    await archiveDiscordThread(botToken, ticket.threadId);
+  }
+
+  await deleteDiscordMessage(botToken, activeChannelId, activeMessageId);
+
+  const updated: TicketRecord = {
+    ...ticket,
+    archived: true,
+    activeWebhookId: ticket.webhookId,
+    activeWebhookToken: ticket.webhookToken,
+    activeChannelId,
+    activeMessageId,
+    webhookId: ticket.closedWebhookId,
+    webhookToken: ticket.closedWebhookToken,
+    channelId: archivedMessage.channel_id,
+    messageId: archivedMessage.id,
+  };
+
+  await saveTicket(env, updated);
+  return updated;
+}
+
+async function restoreTicketToActiveChannel(
+  env: Env,
+  ticket: TicketRecord,
+  botToken: string
+): Promise<TicketRecord> {
+  if (!ticket.archived || !ticket.activeChannelId) {
+    return ticket;
+  }
+
+  await deleteDiscordMessage(botToken, ticket.channelId, ticket.messageId);
+
+  const restoredMessage = await sendDiscordBotMessage(
+    botToken,
+    ticket.activeChannelId,
+    buildTicketMessagePayload(ticket)
+  );
+  if (!restoredMessage) {
+    return ticket;
+  }
+
+  let threadId = ticket.threadId;
+  const threadName =
+    typeof ticket.baseEmbed.title === "string" ? ticket.baseEmbed.title : "Ticket thread";
+  const newThreadId = await createDiscordThreadFromMessage(
+    botToken,
+    restoredMessage.channel_id,
+    restoredMessage.id,
+    threadName
+  );
+  if (newThreadId) {
+    threadId = newThreadId;
+  }
+
+  const updated: TicketRecord = {
+    ...ticket,
+    archived: false,
+    webhookId: ticket.activeWebhookId ?? ticket.webhookId,
+    webhookToken: ticket.activeWebhookToken ?? ticket.webhookToken,
+    channelId: restoredMessage.channel_id,
+    messageId: restoredMessage.id,
+    threadId,
+  };
+
+  await saveTicket(env, updated);
+  return updated;
+}
+
+function archiveActionLabel(action: TicketAction): string {
+  return ACTION_FIELD_LABELS[action] ?? "Updated";
+}
+
+async function finalizeTicketInteraction(
+  env: Env,
+  previous: TicketRecord,
+  updated: TicketRecord,
+  action: TicketAction,
+  pingUserId?: string
+): Promise<Response> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+
+  if (action === "reopen" && previous.archived && botToken) {
+    const restored = await restoreTicketToActiveChannel(env, updated, botToken);
+    return interactionResponse(buildUpdateMessageResponse(restored, pingUserId));
+  }
+
+  if (ARCHIVE_ACTIONS.has(action) && updated.closedWebhookId && botToken) {
+    const archived = await archiveTicketToClosedChannel(env, updated, botToken);
+    if (archived.archived) {
+      return interactionResponse(
+        ephemeral(`${archiveActionLabel(action)}. Ticket moved to the closed queue.`)
+      );
+    }
+  }
+
+  return interactionResponse(buildUpdateMessageResponse(updated, pingUserId));
 }
 
 function buildReassignModal(ticketId: string): unknown {
