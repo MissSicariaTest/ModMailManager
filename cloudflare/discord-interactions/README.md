@@ -1,91 +1,110 @@
 # Discord interactions worker (Cloudflare)
 
-This folder is deployed **separately** from the Devvit Reddit app. Discord sends button clicks here because Reddit Devvit cannot receive public inbound webhooks.
+This Worker handles **Discord button interactions** for Reddit Modmail to Discord. Reddit Devvit cannot receive public inbound webhooks from Discord, so Claim, Close, Reassign, and related ticket actions run here.
 
-## Connect Cloudflare to your GitHub fork
+The Reddit app sends alert embeds and syncs configuration (closed-ticket webhooks, ticket registration). Button clicks update ticket state, move closed tickets, and record metrics for daily reports.
 
-Use **your fork**, not the upstream repo you originally forked from:
+**Repository:** [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
 
-- Repository: **`MissSicariaTest/Spectrum-Modmail-Bot`**
-- Branch: **`cursor/discord-interactive-buttons-bf46`** (or `main` after merge)
+## Prerequisites
 
-### If build fails with `npm ci` / missing `package-lock.json`
+Before deploying, create:
 
-Cloudflare runs automatic `npm ci` before your build command. Add a **build variable**:
+1. A **Discord application** with a bot token
+2. **Interactions Endpoint URL** pointing at this Worker (after first deploy)
+3. Two **Cloudflare KV namespaces**
+
+See the [main README](../README.md#advanced-setup-discord-ticket-management) for Discord bot creation and Reddit app settings.
+
+## Deploy with Cloudflare Git integration
+
+1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Connect to Git**.
+2. Select your fork of **MissSicariaTest/Spectrum-Modmail-Bot** (or this repo if you own it).
+3. Set **Root directory** to: `cloudflare/discord-interactions`
+
+### Build settings
+
+Cloudflare may run `npm ci` automatically. If build fails with a missing lockfile error, add a build variable:
 
 | Variable | Value |
-|----------|--------|
+| --- | --- |
 | `SKIP_DEPENDENCY_INSTALL` | `true` |
 
-Then set **Build command** to:
+**Build command:**
 
 ```bash
 npm install && npx wrangler deploy
 ```
 
-Leave **Deploy command** empty, or set it to `true` / remove duplicate deploy if Cloudflare requires a value — use only one deploy step.
+Leave **Deploy command** empty if Cloudflare would deploy twice. Use **Clear build cache** before redeploying after config changes.
 
-Also click **Clear build cache** under Build settings, then create a **new** deployment (not retry an old one).
+### KV namespaces
 
+**Workers & Pages → KV** → create:
 
-1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create**
-2. Choose **Connect to Git** (you already signed in with GitHub)
-3. Select **`MissSicariaTest/Spectrum-Modmail-Bot`**
-4. Set **Root directory** to: `cloudflare/discord-interactions`
-5. **Build command:** `npm install && npx wrangler deploy`
-6. Create before first deploy:
-   - **Workers & Pages → KV** → Create namespace **`spectrum-modmail-tickets`**
-   - Create namespace **`spectrum-modmail-report`**
-   - Copy both namespace IDs into `wrangler.toml` (replace `REPLACE_WITH_*`)
-7. **Settings → Variables** (secrets — required after every new worker or Git deploy):
-   - `DISCORD_PUBLIC_KEY` — from Discord Developer Portal → General Information → **Public Key**
-   - `DISCORD_BOT_TOKEN` — from Discord Developer Portal → Bot → Token
-   - `WORKER_SECRET` — generate a long random string (same value goes in Reddit app settings)
-   - Optional fallback if Reddit sync is unavailable:
-     - `CLOSED_TICKETS_WEBHOOK_SPECTRUM` — full Discord webhook URL for Webhook 7
-     - `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` — full Discord webhook URL for Webhook 8
-8. Deploy. Copy the worker URL, e.g. `https://modmail.your-subdomain.workers.dev`
+| Name | Binding in `wrangler.toml` |
+| --- | --- |
+| `spectrum-modmail-tickets` (or any name) | `TICKETS` |
+| `spectrum-modmail-report` (or any name) | `REPORT` |
 
-Check configuration anytime: `GET https://your-worker.workers.dev/api/health`
+Paste both namespace IDs into `wrangler.toml`, then deploy.
 
-### Discord Developer Portal
+### Required secrets
 
-1. Create a **Discord Application** (or use your existing mod bot app).
-2. **General Information → Interactions Endpoint URL:** paste your worker URL  
-   Example: `https://modmail.your-subdomain.workers.dev`
-3. Copy **Public Key** into Cloudflare `DISCORD_PUBLIC_KEY` and Reddit app settings.
-4. Save. Discord sends a ping; the worker responds automatically.
+**Settings → Variables** (encrypted secrets):
 
-### Application-owned webhooks (required for buttons)
+| Secret | Source |
+| --- | --- |
+| `DISCORD_PUBLIC_KEY` | Discord Developer Portal → General Information → **Public Key** |
+| `DISCORD_BOT_TOKEN` | Developer Portal → Bot → **Token** (same bot as Reddit app settings) |
+| `WORKER_SECRET` | Long random string — **must match** Reddit **Cloudflare Worker shared secret** |
 
-Channel webhooks created in Discord channel settings send alerts but **strip interactive buttons**.
+Optional fallbacks if Reddit has not synced closed-ticket webhooks yet:
 
-For Claim / Close / Reassign buttons:
+| Secret | Purpose |
+| --- | --- |
+| `CLOSED_TICKETS_WEBHOOK_SPECTRUM` | Full Discord webhook URL for Webhook 7 |
+| `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` | Full Discord webhook URL for Webhook 8 |
 
-1. Use the same Discord application as your Interactions Endpoint.
-2. Create webhooks through that application (bot-owned webhooks), not channel Integrations → Webhooks.
-3. Paste those URLs into Discord Webhook 1–6 in Reddit app settings.
+After deploy, copy the Worker URL (for example `https://modmail.your-name.workers.dev`).
 
-If buttons are missing on alerts, the notification still works but ticket actions will not.
+## Discord Developer Portal
 
-### Reddit Devvit app settings (subreddit install page)
+1. **Interactions Endpoint URL:** your Worker URL (example: `https://modmail.your-name.workers.dev`)
+2. **Public Key:** copy into Cloudflare `DISCORD_PUBLIC_KEY` and Reddit **Discord Application Public Key**
+3. Save — Discord verifies the endpoint automatically
 
-| Setting | Value |
-|---------|--------|
-| `discordBotToken` | Discord Bot Token (same app as Interactions Endpoint; also set `DISCORD_BOT_TOKEN` on Worker) |
-| `discordApplicationPublicKey` | Optional backup of Discord Public Key |
-| `discordInteractionsWorkerUrl` | Optional — daily report ticket metrics only |
-| `discordInteractionsWorkerSecret` | Optional — must match Cloudflare `WORKER_SECRET` if used |
+## Reddit app settings (must match Worker)
 
-Button actions (Claim, Close, Reassign, etc.) run entirely in Discord via the Cloudflare worker. Reddit only sends the initial alert embed and links.
+| Reddit setting | Worker / Discord |
+| --- | --- |
+| Discord Bot Token | `DISCORD_BOT_TOKEN` |
+| Discord Application Public Key | `DISCORD_PUBLIC_KEY` |
+| Cloudflare Worker URL | Deployed Worker URL |
+| Cloudflare Worker shared secret | `WORKER_SECRET` |
+| Discord Webhook 7 / 8 | Synced to Worker on new alerts (or use Cloudflare fallback secrets) |
 
-### Why buttons may be missing
+Button actions run in Discord via this Worker. Reddit sends initial alerts and thread follow-ups.
 
-Regular channel webhooks (Integrations → Webhooks in Discord) send alerts but **remove interactive buttons**.
+## Health check
 
-**Fix:** Add your **Discord Bot Token** in Reddit app settings and Cloudflare `DISCORD_BOT_TOKEN`. The app sends alerts through your bot so Claim/Close/Reassign buttons appear, while still using your existing webhook URLs to find the right channel.
+```bash
+curl https://YOUR-WORKER.workers.dev/api/health
+```
 
-## Manual deploy (without GitHub)
+- `closedWebhooksFromReddit.spectrum: true` — Webhook 7 reached the Worker from Reddit
+- `CLOSED_TICKETS_WEBHOOK_*: false` — optional Cloudflare fallback secret not set (normal if Reddit sync works)
+
+## Report metrics API (authenticated)
+
+```bash
+curl -H "Authorization: Bearer YOUR_WORKER_SECRET" \
+  https://YOUR-WORKER.workers.dev/api/report/snapshot
+```
+
+Used by the Reddit app when building daily reports. Resets after each daily report send.
+
+## Manual deploy (CLI)
 
 ```bash
 cd cloudflare/discord-interactions
@@ -94,6 +113,15 @@ npx wrangler kv namespace create TICKETS
 npx wrangler kv namespace create REPORT
 # Paste IDs into wrangler.toml
 npx wrangler secret put DISCORD_PUBLIC_KEY
+npx wrangler secret put DISCORD_BOT_TOKEN
 npx wrangler secret put WORKER_SECRET
 npm run deploy
 ```
+
+## Troubleshooting
+
+**Buttons missing on alerts** — Add Discord Bot Token in Reddit settings and `DISCORD_BOT_TOKEN` on the Worker so alerts send through the bot.
+
+**Close does not move to Webhook 7** — Set Worker URL + shared secret in Reddit, save, then send a **new** alert. Or set `CLOSED_TICKETS_WEBHOOK_SPECTRUM` on Cloudflare.
+
+**Invalid signature on button click** — `DISCORD_PUBLIC_KEY` must match the Discord application tied to your Interactions Endpoint URL.

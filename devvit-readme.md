@@ -1,67 +1,45 @@
-# Reddit Modmail To Discord or Slack
+# Reddit Modmail to Discord
 
-A Devvit [(Reddit's Developer Platform)](https://developers.reddit.com/) app that instantly sends incoming and outgoing modmails from your subreddit's modmail to a Discord or Slack webhook. Sends the message, sender, participant information, &amp; other relevant information to the webhook payload.
+**Reddit Modmail to Discord** sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to Discord channels through webhook payloads so your team is notified when something needs attention.
 
-This app is open soure, the source code can be found here: [https://github.com/ni5arga/Modmail-To-Discord-Slack](https://github.com/ni5arga/Modmail-To-Discord-Slack).
+Source code: [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
 
-## Screenshots
+## Quick setup
 
-| Discord                                     |
-| ------------------------------------------- |
-| ![Discord](https://i.imgur.com/yq5VX5o.png) |
+### 1. Install the app
 
-| Slack                                     |
-| ----------------------------------------- |
-| ![Slack](https://i.imgur.com/ZwJa805.png) |
+Install [Reddit Modmail to Discord](https://developers.reddit.com/apps/modmailmanager) into your subreddit, then open:
 
-## Setup Instructions
+`https://developers.reddit.com/r/YOUR_SUBREDDIT_NAME/apps/modmailmanager/`
 
-### Discord
+### 2. Create a Discord webhook
 
-1. **Get Discord Webhook URL** : You'll need to generate a Discord Webhook URL from channel settings. You can learn how to get webhook URLs from [this guide](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) or detailed instructions on how to generate Discord Webhook URL can be found below. Discord Webhook URLs look like this: `https://discord.com/api/webhooks/1234567880123/38823ax30320bx_d83289324Q`.
+1. In Discord, open the target channel → **Edit Channel** (gear icon).
+2. Go to **Integrations** → **Webhooks**.
+3. Click **Create Webhook**, name it, and save.
+4. Click **Copy Webhook URL**.
 
-2. **Put The URL In Your App Settings** : After you've obtained the webhook URL, you'll need to put it in the app settings. App settings can be found at `https://developers.reddit.com/r/insert-your-subreddit-name-here/apps/modmailtodiscord/`. After putting the Webhook URL in the text-box - click on the Save Changes button.
+### 3. Add the webhook to app settings
 
-Instructions on How to Get Discord Webhook URL:
+Paste the URL into **Discord Webhook 1 — Modmail** and click **Save Changes**.
 
-1. **Create a Discord Webhook:** - Open or create a Discord server where you have the necessary permissions. - Go to the channel where you want the webhook to send messages. - Right-click on the channel name and select "Edit Channel."
-2. **Navigate to Integrations:** - In the channel settings, find the "Webhooks" option under the Integrations tab in the left-hand menu. - Click on "Webhooks" to access the webhook settings.
-3. **Create a New Webhook:** - Click the "Create Webhook" button. - Customize the webhook by giving it a name, setting the profile picture (optional), and choosing the channel where it will send messages. - Once configured, click the "Save" or "Create" button.
-4. **Copy the Webhook URL:** - After creating the webhook, you'll see a section with the webhook URL. - Click on the "Copy" button next to the webhook URL to save it to your clipboard.
+Optional: use separate webhooks for mod queue (Webhook 3), new posts (Webhook 5), closed tickets (Webhook 7), and daily reports.
 
+## Features
 
-### Slack
+- Modmail alerts with subject, author, participant, body preview, and mod note styling
+- New post and mod queue (report / AutoMod) alerts
+- Ignore list, role pings, outgoing mod message toggle, mod-discussion-only mode
+- **Advanced:** Claim / Close / Resolved / Unresolved / Reassign / Reopen buttons, closed-ticket queue, thread follow-ups, and daily reports — requires your own Discord bot + Cloudflare Worker (see the GitHub README)
 
-1. **Get Slack Webhook URL** : You'll need to obtain a Webhook URL to send the messages to a particular channel of your workspace - [here's a guide](https://api.slack.com/messaging/webhooks) on how to obtain the Slack Webhook URL. Slack Webhook URLs look like `https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX`.
+## Advanced ticket management
 
-2. **Put The URL In Your App Settings** : After you have obtained the webhook URL, you'll need to put it in the app settings. App settings can be found at `https://developers.reddit.com/r/insert-your-subreddit-name-here/apps/modmailtodiscord/`. After putting the Webhook URL in the text-box - click on the Save Changes button.
+To manage modmail tickets from Discord with interactive buttons:
 
-## Details
+1. Create a Discord application and bot in the [Developer Portal](https://discord.com/developers/applications).
+2. Invite the bot to your server with message permissions.
+3. Deploy the Cloudflare Worker from the GitHub repo (`cloudflare/discord-interactions`).
+4. Set the Worker URL as Discord **Interactions Endpoint URL**.
+5. Add **Discord Bot Token**, **Public Key**, **Worker URL**, and **Worker shared secret** in this app’s settings.
 
-The app sends all incoming and outgoing modmails from your subreddit's modmail to your Discord/Slack channel through webhooks. Here are the details the app currently sends (more to be added soon):
-
-1. **Modmail Subject** - The subject of the modmail (incoming or outgoing)
-2. **Modmail Link** - The link of the modmail thread, the app sends `https://mod.reddit.com/all/{conversation-ID-here}` links
-3. **Author** - Author of the modmail message or the latest message in the modmail thread
-4. **Body** - Sends the message body in Markdown
-5. **Participant** - The participant of the modmail conversation (most of the times it'll be the user, unless it's a mod discussion or a subreddit to subreddit conversation)
-6. **Participating As** - What the user is participating as, whether as `participant_user` or as `moderator`
-
-## Changelog
-
-**Latest Version:**
-- Added a feature to which helps to differentiate between regular messages and private mod notes.
-- Added ignore-list which helps mods to ignore messages from certain users/mods.
-- Added discord role-ping feature.
-- Mod discussion syncing setting.
-- Fix Discord embed character limit issue.
-
-**Previous Versions:**
-- Add setting for app to ignore outgoing modmail messages by mods and not send them to the webhook 
-- Declutter Discord & Slack embed 
-- Add support for more Discord webhook URLs (Canary, PTB, etc.)
-
-## Contributions
-
-Feel free to contribute and improve this project. Pull requests and issues are always welcome.
-
+Full step-by-step instructions: [README on GitHub](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot#advanced-setup-discord-ticket-management).
