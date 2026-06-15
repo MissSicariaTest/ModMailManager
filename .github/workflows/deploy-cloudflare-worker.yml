@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - cursor/discord-interactive-buttons-bf46
+      - cursor/thread-followups-closed-queue-bf46
       - main
     paths:
       - "cloudflare/discord-interactions/**"
