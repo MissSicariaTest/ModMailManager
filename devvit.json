@@ -23,33 +23,33 @@
     "subreddit": {
       "spectrumModmailWebhook": {
         "type": "string",
-        "label": "Discord Webhook 1",
-        "helpText": "Where you want your messages to go."
+        "label": "Discord Webhook 1 — Modmail",
+        "helpText": "Modmail alerts for your primary community. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank."
       },
       "spectrumOfficialModmailWebhook": {
         "type": "string",
-        "label": "Discord Webhook 2",
-        "helpText": "Where you want your messages to go."
+        "label": "Discord Webhook 2 — Modmail",
+        "helpText": "Modmail alerts for your secondary community. Also used for mod queue and new posts if Webhooks 4 or 6 are left blank."
       },
       "spectrumModQueueWebhook": {
         "type": "string",
-        "label": "Discord Webhook 3",
-        "helpText": "Where you want your messages to go."
+        "label": "Discord Webhook 3 — Mod Queue",
+        "helpText": "Mod queue alerts (reports, AutoMod) for your primary community. Falls back to Webhook 1 if left blank."
       },
       "spectrumOfficialModQueueWebhook": {
         "type": "string",
-        "label": "Discord Webhook 4",
-        "helpText": "Where you want your messages to go."
+        "label": "Discord Webhook 4 — Mod Queue",
+        "helpText": "Mod queue alerts (reports, AutoMod) for your secondary community. Falls back to Webhook 2 if left blank."
       },
       "spectrumNewPostsWebhook": {
         "type": "string",
-        "label": "Discord Webhook 5",
-        "helpText": "Where you want your messages to go."
+        "label": "Discord Webhook 5 — New Posts",
+        "helpText": "New post alerts for your primary community. Falls back to Webhook 1 if left blank."
       },
       "spectrumOfficialNewPostsWebhook": {
         "type": "string",
-        "label": "Discord Webhook 6",
-        "helpText": "Where you want your messages to go."
+        "label": "Discord Webhook 6 — New Posts",
+        "helpText": "New post alerts for your secondary community. Falls back to Webhook 2 if left blank."
       },
       "reportingWebhook": {
         "type": "string",
