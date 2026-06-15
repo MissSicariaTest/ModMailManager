@@ -9,7 +9,9 @@ export async function getWorkerConfig(): Promise<{
   const url = ((await settings.get("discordInteractionsWorkerUrl")) as string | undefined)
     ?.trim()
     .replace(/\/$/, "");
-  const secret = ((await settings.get("discordInteractionsWorkerSecret")) as string | undefined)?.trim();
+  const secret = ((await settings.get("discordInteractionsWorkerSecret")) as string | undefined)
+    ?.trim()
+    .replace(/^Bearer\s+/i, "");
 
   if (!url || !secret) {
     return null;

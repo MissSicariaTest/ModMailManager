@@ -115,6 +115,7 @@ type ClosedWebhookCredentials = {
 type ClosedWebhookConfig = {
   spectrum?: ClosedWebhookCredentials | null;
   spectrum_official?: ClosedWebhookCredentials | null;
+  syncedAt?: string;
 };
 
 export default {
@@ -191,9 +192,23 @@ async function syncClosedWebhooksConfig(request: Request, env: Env): Promise<Res
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const config = (await request.json()) as ClosedWebhookConfig;
-  await env.TICKETS.put(CLOSED_WEBHOOKS_CONFIG_KEY, JSON.stringify(config));
-  return Response.json({ ok: true });
+  const incoming = (await request.json()) as ClosedWebhookConfig;
+  const existing = (await getClosedWebhookConfig(env)) ?? {};
+  const merged: ClosedWebhookConfig = {
+    spectrum: incoming.spectrum ?? existing.spectrum ?? null,
+    spectrum_official: incoming.spectrum_official ?? existing.spectrum_official ?? null,
+    syncedAt: new Date().toISOString(),
+  };
+
+  await env.TICKETS.put(CLOSED_WEBHOOKS_CONFIG_KEY, JSON.stringify(merged));
+  return Response.json({
+    ok: true,
+    closedWebhooksFromReddit: {
+      spectrum: Boolean(merged.spectrum?.webhookId),
+      spectrum_official: Boolean(merged.spectrum_official?.webhookId),
+    },
+    syncedAt: merged.syncedAt,
+  });
 }
 
 async function getTicketById(request: Request, env: Env, ticketId: string): Promise<Response> {
@@ -220,6 +235,7 @@ async function registerTicket(request: Request, env: Env): Promise<Response> {
   }
 
   await saveTicket(env, ticket);
+  await mergeClosedWebhookFromTicket(env, ticket);
   return Response.json({ ok: true, id: ticket.id });
 }
 
@@ -1026,6 +1042,25 @@ async function getClosedWebhookConfig(env: Env): Promise<ClosedWebhookConfig | n
   return raw ? (JSON.parse(raw) as ClosedWebhookConfig) : null;
 }
 
+async function mergeClosedWebhookFromTicket(env: Env, ticket: TicketRecord): Promise<void> {
+  if (!ticket.closedWebhookId?.trim() || !ticket.closedWebhookToken?.trim()) {
+    return;
+  }
+
+  const group = ticket.subreddit === "spectrum_official" ? "spectrum_official" : "spectrum";
+  const existing = (await getClosedWebhookConfig(env)) ?? {};
+  const merged: ClosedWebhookConfig = {
+    ...existing,
+    [group]: {
+      webhookId: ticket.closedWebhookId,
+      webhookToken: ticket.closedWebhookToken,
+    },
+    syncedAt: new Date().toISOString(),
+  };
+
+  await env.TICKETS.put(CLOSED_WEBHOOKS_CONFIG_KEY, JSON.stringify(merged));
+}
+
 async function getHealthStatusWithSync(env: Env): Promise<Response> {
   const kvConfig = await getClosedWebhookConfig(env);
   return Response.json({
@@ -1034,6 +1069,7 @@ async function getHealthStatusWithSync(env: Env): Promise<Response> {
       spectrum: Boolean(kvConfig?.spectrum?.webhookId),
       spectrum_official: Boolean(kvConfig?.spectrum_official?.webhookId),
     },
+    lastClosedWebhookSyncAt: kvConfig?.syncedAt ?? null,
   });
 }
 

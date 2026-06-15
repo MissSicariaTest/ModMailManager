@@ -498,16 +498,18 @@ async function sendTicketAlert(options: {
     }
   }
 
-  const shouldPersistTicket = Boolean(
-    botToken && options.redditKey && options.redditKeyType && draftTicket.messageId
-  );
+  const shouldPersistTicket =
+    buttonsAttached || Boolean(draftTicket.threadId && options.redditKey && options.redditKeyType);
 
   if (shouldPersistTicket) {
     if (options.redditKey && options.redditKeyType) {
       await linkRedditKeyToTicket(options.redditKeyType, options.redditKey, draftTicket.id);
     }
     await saveTicket(draftTicket);
-    void registerTicketWithWorker(draftTicket);
+  }
+
+  if (buttonsAttached || draftTicket.closedWebhookId) {
+    await registerTicketWithWorker(draftTicket);
   }
 }
 
