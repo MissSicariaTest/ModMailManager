@@ -50,7 +50,6 @@ import {
   redditPermalinkUrl,
   redditProfileUrl,
   sendDiscordBotMessage,
-  sendDiscordBotThreadMessage,
   sendDiscordWebhook,
   sleep,
   truncateField,
