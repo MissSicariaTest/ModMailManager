@@ -26,7 +26,7 @@ export const TICKET_REDIS_PREFIX = "ticket:";
 export const OPEN_TICKETS_REDIS_KEY = "tickets:open";
 
 export const MONITORED_SUBREDDITS = ["spectrum", "spectrum_official"] as const;
-export const PLAYTEST_SUBREDDIT = "spectrum_modmail_dev";
+export const PLAYTEST_SUBREDDIT = "modmailmanager_dev";
 
 export const MOD_QUEUE_APPROVE_ACTIONS = new Set(["approvelink", "approvecomment"]);
 export const MOD_QUEUE_REMOVE_ACTIONS = new Set([

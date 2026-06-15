@@ -16,7 +16,7 @@ export function resolveSubredditGroup(
   const normalized = normalizeSubredditName(subredditName);
   if (
     normalized === PLAYTEST_SUBREDDIT ||
-    normalized === "modmailmanager_dev" ||
+    normalized === "spectrum_modmail_dev" ||
     normalized === "spectrum"
   ) {
     return "spectrum";

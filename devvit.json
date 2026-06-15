@@ -24,17 +24,17 @@
       "spectrumModmailWebhook": {
         "type": "string",
         "label": "Discord Webhook 1",
-        "helpText": "Where your messages/notifications go."
+        "helpText": "Modmail for r/modmailmanager_dev and r/Spectrum."
       },
       "spectrumOfficialModmailWebhook": {
         "type": "string",
         "label": "Discord Webhook 2",
-        "helpText": "Where your messages/notifications go."
+        "helpText": "Modmail for r/Spectrum_Official only."
       },
       "spectrumModQueueWebhook": {
         "type": "string",
         "label": "Discord Webhook 3",
-        "helpText": "Where your messages/notifications go."
+        "helpText": "Mod queue alerts for r/modmailmanager_dev and r/Spectrum."
       },
       "spectrumOfficialModQueueWebhook": {
         "type": "string",
@@ -118,6 +118,6 @@
     "dev": "vite build --watch"
   },
   "dev": {
-    "subreddit": "spectrum_modmail_dev"
+    "subreddit": "modmailmanager_dev"
   }
 }
