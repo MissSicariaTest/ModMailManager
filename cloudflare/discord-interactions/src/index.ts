@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker: Discord button interactions for Spectrum Modmail Bot.
+ * Cloudflare Worker: Discord button interactions for ModMailModerator.
  * Discord POSTs button clicks here (public). Devvit POSTs new tickets here on register.
  */
 
@@ -154,7 +154,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/") {
-      return new Response("Spectrum Modmail Discord interactions worker", { status: 200 });
+      return new Response("ModMailModerator Discord interactions worker", { status: 200 });
     }
 
     return new Response("Not found", { status: 404 });

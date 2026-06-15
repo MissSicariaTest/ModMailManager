@@ -1,45 +1,76 @@
-# Reddit Modmail to Discord
+# ModMailModerator
 
-**Reddit Modmail to Discord** sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to Discord channels through webhook payloads so your team is notified when something needs attention.
+A Devvit app that sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to your Discord channels. It sends the message and other relevant information through a webhook payload so your team can be notified when new messages, posts, or moderation items need attention.
 
-Source code: [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
+Source code and full documentation: [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
 
-## Quick setup
-
-### 1. Install the app
-
-Install [Reddit Modmail to Discord](https://developers.reddit.com/apps/modmailmanager) into your subreddit, then open:
-
-`https://developers.reddit.com/r/YOUR_SUBREDDIT_NAME/apps/modmailmanager/`
-
-### 2. Create a Discord webhook
-
-1. In Discord, open the target channel → **Edit Channel** (gear icon).
-2. Go to **Integrations** → **Webhooks**.
-3. Click **Create Webhook**, name it, and save.
-4. Click **Copy Webhook URL**.
-
-### 3. Add the webhook to app settings
-
-Paste the URL into **Discord Webhook 1 — Modmail** and click **Save Changes**.
-
-Optional: use separate webhooks for mod queue (Webhook 3), new posts (Webhook 5), closed tickets (Webhook 7), and daily reports.
+---
 
 ## Features
 
-- Modmail alerts with subject, author, participant, body preview, and mod note styling
-- New post and mod queue (report / AutoMod) alerts
-- Ignore list, role pings, outgoing mod message toggle, mod-discussion-only mode
-- **Advanced:** Claim / Close / Resolved / Unresolved / Reassign / Reopen buttons, closed-ticket queue, thread follow-ups, and daily reports — requires your own Discord bot + Cloudflare Worker (see the GitHub README)
+- Sends incoming modmail messages to a dedicated Discord channel
+- Sends new post alerts to a dedicated Discord channel
+- Sends mod queue alerts to a dedicated Discord channel
+- Supports separate webhook URLs for a primary and secondary subreddit
+- Supports role pings when new messages arrive
+- Supports an ignore list for specific users or moderators
+- Supports private mod note detection with custom color coding
 
-## Advanced ticket management
+---
 
-To manage modmail tickets from Discord with interactive buttons:
+## Setup Instructions
 
-1. Create a Discord application and bot in the [Developer Portal](https://discord.com/developers/applications).
-2. Invite the bot to your server with message permissions.
-3. Deploy the Cloudflare Worker from the GitHub repo (`cloudflare/discord-interactions`).
-4. Set the Worker URL as Discord **Interactions Endpoint URL**.
-5. Add **Discord Bot Token**, **Public Key**, **Worker URL**, and **Worker shared secret** in this app’s settings.
+### Step 1 — Install the App
 
-Full step-by-step instructions: [README on GitHub](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot#advanced-setup-discord-ticket-management).
+1. Click **Install** and select the subreddit you want to monitor
+2. Approve the permissions the app requests
+3. Repeat for any additional subreddits
+
+---
+
+### Step 2 — Create Your Discord Webhooks
+
+For each Discord channel you want to receive alerts:
+
+1. Right-click the channel in Discord and select **Edit Channel**
+2. Click **Integrations** → **Webhooks** → **Create Webhook**
+3. Give it a name and click **Copy Webhook URL**
+
+---
+
+### Step 3 — Add Webhook URLs to App Settings
+
+Go to your subreddit's app settings at:
+
+`https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmoderator`
+
+Paste each webhook URL into the corresponding field and click **Save Changes**.
+
+- **Webhook 1** — modmail alerts (also used as fallback for mod queue and new posts)
+- **Webhook 3** — mod queue alerts (optional)
+- **Webhook 5** — new post alerts (optional)
+- **Daily Report Webhook** — daily summary (optional, posts at 8 AM US Eastern)
+
+---
+
+### Step 4 — Configure Optional Settings
+
+- **Send outgoing mod messages to Discord** — also alert on mod replies
+- **Ignore list** — comma-separated Reddit usernames to exclude
+- **Discord Role ID to Ping** — pings a role on new alerts
+- **Only Sync Mod Discussions** — limit to internal mod discussions only
+- **Secondary Subreddit Name** — if monitoring two subreddits, enter the second one here and fill in Webhooks 2, 4, and 6
+
+---
+
+## Advanced — Discord Ticket Management
+
+To add interactive buttons (Claim, Close, Resolved, Unresolved, Reassign, Reopen) to modmail embeds:
+
+1. Create a Discord application and bot at [discord.com/developers/applications](https://discord.com/developers/applications)
+2. Invite the bot to your Discord server
+3. Deploy the Cloudflare Worker from the GitHub repository (`cloudflare/discord-interactions`)
+4. Add the Worker URL as the Discord **Interactions Endpoint URL**
+5. Add the **Discord Bot Token**, **Application Public Key**, **Worker URL**, and **Worker Shared Secret** in the app settings
+
+Full setup guide: [github.com/MissSicariaTest/Spectrum-Modmail-Bot#advanced--discord-ticket-management-bot-optional](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot#advanced--discord-ticket-management-bot-optional)

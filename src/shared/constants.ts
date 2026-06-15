@@ -7,7 +7,7 @@ export const DISCORD_WEBHOOK_HOSTS = [
   "discordapp.com",
 ] as const;
 
-export const SPECTRUM_BLUE = 0x005fff;
+export const SPECTRUM_BLUE = 0x005fff; // primary embed color
 export const PRIVATE_NOTE_GREEN = 0x00cc66;
 export const REPORTED_ORANGE = 0xff4500;
 export const AUTOMOD_YELLOW = 0xffcc00;

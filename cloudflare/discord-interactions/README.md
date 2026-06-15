@@ -1,30 +1,32 @@
-# Discord interactions worker (Cloudflare)
+# ModMailModerator — Discord Interactions Worker (Cloudflare)
 
-This Worker handles **Discord button interactions** for Reddit Modmail to Discord. Reddit Devvit cannot receive public inbound webhooks from Discord, so Claim, Close, Reassign, and related ticket actions run here.
+This Cloudflare Worker handles **Discord button interactions** for ModMailModerator. When a moderator clicks a ticket button (Claim, Close, Resolved, etc.) in Discord, Discord sends the interaction here. The Worker updates the ticket state, edits the embed in-place, and moves closed tickets to the archive channel.
 
-The Reddit app sends alert embeds and syncs configuration (closed-ticket webhooks, ticket registration). Button clicks update ticket state, move closed tickets, and record metrics for daily reports.
+Reddit Devvit cannot receive public inbound webhooks from Discord, so all button click handling runs in this Worker rather than the Reddit app.
 
 **Repository:** [github.com/MissSicariaTest/Spectrum-Modmail-Bot](https://github.com/MissSicariaTest/Spectrum-Modmail-Bot)
 
+---
+
 ## Prerequisites
 
-Before deploying, create:
+Before deploying, you need:
 
-1. A **Discord application** with a bot token
-2. **Interactions Endpoint URL** pointing at this Worker (after first deploy)
-3. Two **Cloudflare KV namespaces**
+1. A Discord application with a bot token (see [main README](../../README.md#create-a-discord-bot))
+2. Two Cloudflare KV namespaces created in your Cloudflare dashboard
+3. A shared secret string you will use in both Cloudflare and Reddit app settings
 
-See the [main README](../README.md#advanced-setup-discord-ticket-management) for Discord bot creation and Reddit app settings.
+---
 
-## Deploy with Cloudflare Git integration
+## Deploy via Cloudflare Git Integration
 
-1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Connect to Git**.
-2. Select your fork of **MissSicariaTest/Spectrum-Modmail-Bot** (or this repo if you own it).
+1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Connect to Git**
+2. Select the **MissSicariaTest/Spectrum-Modmail-Bot** repository (or your fork)
 3. Set **Root directory** to: `cloudflare/discord-interactions`
 
 ### Build settings
 
-Cloudflare may run `npm ci` automatically. If build fails with a missing lockfile error, add a build variable:
+Cloudflare may try to run `npm ci` before your build step. If the build fails with a missing lockfile error, add a build variable:
 
 | Variable | Value |
 | --- | --- |
@@ -36,55 +38,74 @@ Cloudflare may run `npm ci` automatically. If build fails with a missing lockfil
 npm install && npx wrangler deploy
 ```
 
-Leave **Deploy command** empty if Cloudflare would deploy twice. Use **Clear build cache** before redeploying after config changes.
+Leave the Deploy command empty (the build command deploys the Worker). Use **Clear build cache** after changing KV namespace IDs or secrets.
 
 ### KV namespaces
 
-**Workers & Pages → KV** → create:
+Create two namespaces in **Cloudflare Dashboard → Workers & Pages → KV**:
 
-| Name | Binding in `wrangler.toml` |
+| Create with name | Binding in wrangler.toml |
 | --- | --- |
-| `spectrum-modmail-tickets` (or any name) | `TICKETS` |
-| `spectrum-modmail-report` (or any name) | `REPORT` |
+| `modmail-tickets` (or any name) | `TICKETS` |
+| `modmail-report` (or any name) | `REPORT` |
 
-Paste both namespace IDs into `wrangler.toml`, then deploy.
+After creating, copy each namespace ID and paste it into `wrangler.toml`:
+
+```toml
+[[kv_namespaces]]
+binding = "TICKETS"
+id = "PASTE_TICKETS_NAMESPACE_ID_HERE"
+
+[[kv_namespaces]]
+binding = "REPORT"
+id = "PASTE_REPORT_NAMESPACE_ID_HERE"
+```
 
 ### Required secrets
 
-**Settings → Variables** (encrypted secrets):
+In **Settings → Variables** (use encrypted secrets, not plain variables):
 
-| Secret | Source |
+| Secret | Where to get it |
 | --- | --- |
-| `DISCORD_PUBLIC_KEY` | Discord Developer Portal → General Information → **Public Key** |
-| `DISCORD_BOT_TOKEN` | Developer Portal → Bot → **Token** (same bot as Reddit app settings) |
-| `WORKER_SECRET` | Long random string — **must match** Reddit **Cloudflare Worker shared secret** |
+| `DISCORD_PUBLIC_KEY` | Discord Developer Portal → your app → **General Information → Public Key** |
+| `DISCORD_BOT_TOKEN` | Discord Developer Portal → **Bot → Token** (same bot invited to your server) |
+| `WORKER_SECRET` | A long random string — **must match** the **Cloudflare Worker Shared Secret** in Reddit app settings |
 
-Optional fallbacks if Reddit has not synced closed-ticket webhooks yet:
+Optional closed-ticket webhook fallbacks (used if Reddit has not synced Webhook 7 yet):
 
 | Secret | Purpose |
 | --- | --- |
-| `CLOSED_TICKETS_WEBHOOK_SPECTRUM` | Full Discord webhook URL for Webhook 7 |
-| `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` | Full Discord webhook URL for Webhook 8 |
+| `CLOSED_TICKETS_WEBHOOK_PRIMARY` | Full Discord webhook URL for the primary closed-tickets channel |
+| `CLOSED_TICKETS_WEBHOOK_SECONDARY` | Full Discord webhook URL for the secondary closed-tickets channel |
 
-After deploy, copy the Worker URL (for example `https://modmail.your-name.workers.dev`).
+After deploying, copy your Worker URL (for example `https://modmail.your-name.workers.dev`).
+
+---
 
 ## Discord Developer Portal
 
-1. **Interactions Endpoint URL:** your Worker URL (example: `https://modmail.your-name.workers.dev`)
-2. **Public Key:** copy into Cloudflare `DISCORD_PUBLIC_KEY` and Reddit **Discord Application Public Key**
-3. Save — Discord verifies the endpoint automatically
+1. Open your Discord application → **General Information**
+2. Set **Interactions Endpoint URL** to your Worker URL
+3. Copy the **Public Key** → add it as `DISCORD_PUBLIC_KEY` on the Worker and as **Discord Application Public Key** in Reddit app settings
+4. Click **Save** — Discord sends a ping to verify; the Worker responds automatically
 
-## Reddit app settings (must match Worker)
+---
 
-| Reddit setting | Worker / Discord |
+## Reddit App Settings
+
+Go to `https://developers.reddit.com/r/YOUR-SUBREDDIT/apps/modmailmoderator` and fill in:
+
+| Setting | Value |
 | --- | --- |
-| Discord Bot Token | `DISCORD_BOT_TOKEN` |
-| Discord Application Public Key | `DISCORD_PUBLIC_KEY` |
-| Cloudflare Worker URL | Deployed Worker URL |
-| Cloudflare Worker shared secret | `WORKER_SECRET` |
-| Discord Webhook 7 / 8 | Synced to Worker on new alerts (or use Cloudflare fallback secrets) |
+| Discord Bot Token | Your bot token |
+| Discord Application Public Key | Public Key from Developer Portal |
+| Cloudflare Worker URL | Your deployed Worker URL (no trailing slash) |
+| Cloudflare Worker Shared Secret | Same value as `WORKER_SECRET` on the Worker |
+| Webhook 7 — Closed Tickets (Primary) | Webhook URL for the closed-tickets archive channel |
 
-Button actions run in Discord via this Worker. Reddit sends initial alerts and thread follow-ups.
+Save, then trigger a new alert (send a modmail to your subreddit) so the app syncs Webhook 7 to the Worker.
+
+---
 
 ## Health check
 
@@ -92,17 +113,26 @@ Button actions run in Discord via this Worker. Reddit sends initial alerts and t
 curl https://YOUR-WORKER.workers.dev/api/health
 ```
 
-- `closedWebhooksFromReddit.spectrum: true` — Webhook 7 reached the Worker from Reddit
-- `CLOSED_TICKETS_WEBHOOK_*: false` — optional Cloudflare fallback secret not set (normal if Reddit sync works)
+Expected response fields:
 
-## Report metrics API (authenticated)
+- `ok: true` — secrets are configured
+- `closedWebhooksFromReddit.primary: true` — Webhook 7 has been synced from Reddit settings
+- `CLOSED_TICKETS_WEBHOOK_*: false` — optional Cloudflare fallback secrets not set (normal if Reddit sync works)
+
+---
+
+## Authenticated report metrics API
+
+The Reddit app calls this endpoint when building daily reports:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_WORKER_SECRET" \
   https://YOUR-WORKER.workers.dev/api/report/snapshot
 ```
 
-Used by the Reddit app when building daily reports. Resets after each daily report send.
+Returns button-action counts per moderator. Resets after each daily report send.
+
+---
 
 ## Manual deploy (CLI)
 
@@ -111,17 +141,21 @@ cd cloudflare/discord-interactions
 npm install
 npx wrangler kv namespace create TICKETS
 npx wrangler kv namespace create REPORT
-# Paste IDs into wrangler.toml
+# Paste both namespace IDs into wrangler.toml
 npx wrangler secret put DISCORD_PUBLIC_KEY
 npx wrangler secret put DISCORD_BOT_TOKEN
 npx wrangler secret put WORKER_SECRET
 npm run deploy
 ```
 
+---
+
 ## Troubleshooting
 
-**Buttons missing on alerts** — Add Discord Bot Token in Reddit settings and `DISCORD_BOT_TOKEN` on the Worker so alerts send through the bot.
+**Buttons are missing on alerts** — Add the Discord Bot Token in Reddit app settings and `DISCORD_BOT_TOKEN` on the Worker. Standard channel webhooks (Integrations → Webhooks in Discord) may strip interactive components. Your bot must be in the server and able to send messages in the alert channel.
 
-**Close does not move to Webhook 7** — Set Worker URL + shared secret in Reddit, save, then send a **new** alert. Or set `CLOSED_TICKETS_WEBHOOK_SPECTRUM` on Cloudflare.
+**Close button does not move the ticket to Webhook 7** — Ensure Worker URL + Shared Secret are set in Reddit app settings. Save, then trigger a new alert so the app syncs the closed-tickets webhook URL to the Worker. Alternatively, set `CLOSED_TICKETS_WEBHOOK_PRIMARY` directly on the Worker as a fallback.
 
-**Invalid signature on button click** — `DISCORD_PUBLIC_KEY` must match the Discord application tied to your Interactions Endpoint URL.
+**Invalid request signature on button click** — `DISCORD_PUBLIC_KEY` must match the application in Discord's Developer Portal that is set as the Interactions Endpoint. If you have multiple apps, confirm you are using the correct one.
+
+**Worker build fails on Cloudflare** — Add `SKIP_DEPENDENCY_INSTALL=true` as a build variable and set build command to `npm install && npx wrangler deploy`. Clear the build cache before retrying.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "modmailmanager",
+  "name": "modmailmoderator",
   "server": {
     "dir": "dist/server",
     "entry": "index.cjs"
@@ -21,69 +21,75 @@
   },
   "settings": {
     "subreddit": {
-      "spectrumModmailWebhook": {
+      "primaryModmailWebhook": {
         "type": "string",
-        "label": "Discord Webhook 1 — Modmail",
-        "helpText": "Modmail alerts for your primary community. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank. Add your Discord Bot Token below to enable buttons."
+        "label": "Discord Webhook 1 — Modmail (Primary)",
+        "helpText": "Discord webhook URL for modmail alerts. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank."
       },
-      "spectrumOfficialModmailWebhook": {
+      "secondaryModmailWebhook": {
         "type": "string",
-        "label": "Discord Webhook 2 — Modmail",
-        "helpText": "Modmail alerts for your secondary community. Also used for mod queue and new posts if Webhooks 4 or 6 are left blank."
+        "label": "Discord Webhook 2 — Modmail (Secondary)",
+        "helpText": "Modmail alerts for a second subreddit. Configure Secondary Subreddit Name below. Falls back to Webhook 1 if left blank."
       },
-      "spectrumModQueueWebhook": {
+      "primaryModQueueWebhook": {
         "type": "string",
-        "label": "Discord Webhook 3 — Mod Queue",
-        "helpText": "Mod queue alerts (reports, AutoMod) for your primary community. Falls back to Webhook 1 if left blank."
+        "label": "Discord Webhook 3 — Mod Queue (Primary)",
+        "helpText": "Mod queue alerts (reports, AutoMod) for the primary subreddit. Falls back to Webhook 1 if left blank."
       },
-      "spectrumOfficialModQueueWebhook": {
+      "secondaryModQueueWebhook": {
         "type": "string",
-        "label": "Discord Webhook 4 — Mod Queue",
-        "helpText": "Mod queue alerts (reports, AutoMod) for your secondary community. Falls back to Webhook 2 if left blank."
+        "label": "Discord Webhook 4 — Mod Queue (Secondary)",
+        "helpText": "Mod queue alerts for the secondary subreddit. Falls back to Webhook 2 if left blank."
       },
-      "spectrumNewPostsWebhook": {
+      "primaryNewPostsWebhook": {
         "type": "string",
-        "label": "Discord Webhook 5 — New Posts",
-        "helpText": "New post alerts for your primary community. Falls back to Webhook 1 if left blank."
+        "label": "Discord Webhook 5 — New Posts (Primary)",
+        "helpText": "New post alerts for the primary subreddit. Falls back to Webhook 1 if left blank."
       },
-      "spectrumOfficialNewPostsWebhook": {
+      "secondaryNewPostsWebhook": {
         "type": "string",
-        "label": "Discord Webhook 6 — New Posts",
-        "helpText": "New post alerts for your secondary community. Falls back to Webhook 2 if left blank."
+        "label": "Discord Webhook 6 — New Posts (Secondary)",
+        "helpText": "New post alerts for the secondary subreddit. Falls back to Webhook 2 if left blank."
       },
-      "spectrumClosedTicketsWebhook": {
+      "primaryClosedTicketsWebhook": {
         "type": "string",
-        "label": "Discord Webhook 7 — Closed Tickets",
-        "helpText": "When a ticket is closed or resolved, its embed is removed from the active channel and reposted here. Requires Discord Bot Token."
+        "label": "Discord Webhook 7 — Closed Tickets (Primary)",
+        "helpText": "When a ticket is closed or resolved, its embed is moved here. Requires Discord Bot Token."
       },
-      "spectrumOfficialClosedTicketsWebhook": {
+      "secondaryClosedTicketsWebhook": {
         "type": "string",
-        "label": "Discord Webhook 8 — Closed Tickets",
-        "helpText": "Closed and resolved tickets for your secondary community. Requires Discord Bot Token."
+        "label": "Discord Webhook 8 — Closed Tickets (Secondary)",
+        "helpText": "Closed and resolved ticket archive for the secondary subreddit. Requires Discord Bot Token."
+      },
+      "secondarySubredditName": {
+        "type": "string",
+        "label": "Secondary Subreddit Name (optional)",
+        "helpText": "If you monitor a second subreddit, enter its name here (without r/). Events from this subreddit will use Webhooks 2, 4, 6, and 8."
       },
       "reportingWebhook": {
         "type": "string",
-        "label": "Webhook URL for the shared daily reporting channel"
+        "label": "Daily Report Webhook URL",
+        "helpText": "Discord webhook for daily moderation reports. Sent once per day at 8 AM US Eastern."
       },
       "discordApplicationPublicKey": {
         "type": "string",
         "label": "Discord Application Public Key",
-        "helpText": "From Discord Developer Portal → General Information → Public Key. Must match the DISCORD_PUBLIC_KEY secret on your Cloudflare Worker."
+        "helpText": "From Discord Developer Portal → General Information → Public Key. Required to verify button interactions."
       },
       "discordInteractionsWorkerUrl": {
         "type": "string",
         "label": "Cloudflare Worker URL",
-        "helpText": "Required for closed-ticket moves. Example: https://modmail.your-name.workers.dev — must match your Worker. Reddit uses this to sync Webhook 7/8 to the Worker."
+        "helpText": "Your deployed Cloudflare Worker URL (e.g. https://modmail.your-name.workers.dev). Required for closed-ticket moves and Discord button metrics."
       },
       "discordInteractionsWorkerSecret": {
         "type": "string",
-        "label": "Cloudflare Worker shared secret",
-        "helpText": "Required for closed-ticket moves. Must exactly match WORKER_SECRET on your Cloudflare Worker."
+        "label": "Cloudflare Worker Shared Secret",
+        "helpText": "Must exactly match the WORKER_SECRET set on your Cloudflare Worker. Required for closed-ticket syncing."
       },
       "discordBotToken": {
         "type": "string",
         "label": "Discord Bot Token",
-        "helpText": "Required for Claim/Close/Reassign buttons. From Discord Developer Portal → Bot → Reset Token. Must be the same application as your Interactions Endpoint. Also add as DISCORD_BOT_TOKEN on your Cloudflare Worker."
+        "helpText": "Required for Claim/Close/Reassign/Reopen buttons. From Discord Developer Portal → Bot → Reset Token. Must belong to the same application as your Interactions Endpoint URL. Also add as DISCORD_BOT_TOKEN on your Cloudflare Worker."
       },
       "outgoing": {
         "type": "boolean",
@@ -92,18 +98,18 @@
       },
       "ignoreUsers": {
         "type": "string",
-        "label": "Ignore list (comma-separated usernames, don't include u/)",
-        "helpText": "Add Reddit usernames (case-insensitive) separated by commas to skip them from webhook payloads."
+        "label": "Ignore list (comma-separated usernames, no u/)",
+        "helpText": "Reddit usernames (case-insensitive) to exclude from webhook alerts."
       },
       "rolePing": {
         "type": "string",
         "label": "Discord Role ID to Ping",
-        "helpText": "Enter a Discord Role ID to ping when a message is sent. Leave blank to disable."
+        "helpText": "Enter a Discord Role ID to ping on new alerts. Leave blank to disable."
       },
       "onlyModDiscussions": {
         "type": "boolean",
         "label": "Only Sync Mod Discussions",
-        "helpText": "If enabled, only mod discussion messages will be sent to the webhook.",
+        "helpText": "If enabled, only internal mod discussion messages are sent to the webhook.",
         "defaultValue": false
       }
     }

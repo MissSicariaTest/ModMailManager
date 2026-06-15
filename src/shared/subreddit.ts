@@ -10,83 +10,85 @@ export function normalizeSubredditName(name: string): string {
   return name.replace(/^r\//i, "").trim().toLowerCase();
 }
 
+/**
+ * Maps a subreddit name to a routing group.
+ *
+ * Any subreddit resolves to "primary" unless it matches the optional
+ * secondarySubredditName, in which case it resolves to "secondary".
+ * Both groups are represented by the internal keys "spectrum" (primary)
+ * and "spectrum_official" (secondary) for backward-compatibility with
+ * existing Redis data.
+ */
 export function resolveSubredditGroup(
-  subredditName: string
-): MonitoredSubreddit | null {
+  subredditName: string,
+  secondarySubredditName?: string | null
+): MonitoredSubreddit {
   const normalized = normalizeSubredditName(subredditName);
-  if (
-    normalized === PLAYTEST_SUBREDDIT ||
-    normalized === "spectrum_modmail_dev" ||
-    normalized === "spectrum"
-  ) {
-    return "spectrum";
-  }
-  if (normalized === "spectrum_official") {
+  if (secondarySubredditName && normalized === normalizeSubredditName(secondarySubredditName)) {
     return "spectrum_official";
   }
-  return null;
+  return "spectrum";
 }
 
+/** Always true — any subreddit with a non-empty name is now monitored. */
 export function isMonitoredSubreddit(subredditName: string): boolean {
-  return resolveSubredditGroup(subredditName) !== null;
+  return Boolean(subredditName?.trim());
 }
 
 export function getMonitoredSubredditKey(
-  subredditName: string
+  subredditName: string,
+  secondarySubredditName?: string | null
 ): MonitoredSubreddit | null {
-  return resolveSubredditGroup(subredditName);
-}
-
-export function getClosedWebhookSettingName(subredditName: string): string | null {
-  const group = resolveSubredditGroup(subredditName);
-  if (!group) {
+  if (!isMonitoredSubreddit(subredditName)) {
     return null;
   }
+  return resolveSubredditGroup(subredditName, secondarySubredditName);
+}
 
+export function getClosedWebhookSettingName(
+  subredditName: string,
+  secondarySubredditName?: string | null
+): string {
+  const group = resolveSubredditGroup(subredditName, secondarySubredditName);
   return group === "spectrum"
-    ? "spectrumClosedTicketsWebhook"
-    : "spectrumOfficialClosedTicketsWebhook";
+    ? "primaryClosedTicketsWebhook"
+    : "secondaryClosedTicketsWebhook";
 }
 
 export function getWebhookSettingName(
   subredditName: string,
-  category: WebhookCategory
-): string | null {
-  const group = resolveSubredditGroup(subredditName);
-  if (!group) {
-    return null;
-  }
+  category: WebhookCategory,
+  secondarySubredditName?: string | null
+): string {
+  const group = resolveSubredditGroup(subredditName, secondarySubredditName);
 
   if (group === "spectrum") {
     switch (category) {
       case "modmail":
-        return "spectrumModmailWebhook";
+        return "primaryModmailWebhook";
       case "modqueue":
-        return "spectrumModQueueWebhook";
+        return "primaryModQueueWebhook";
       case "newposts":
-        return "spectrumNewPostsWebhook";
+        return "primaryNewPostsWebhook";
     }
   }
 
   switch (category) {
     case "modmail":
-      return "spectrumOfficialModmailWebhook";
+      return "secondaryModmailWebhook";
     case "modqueue":
-      return "spectrumOfficialModQueueWebhook";
+      return "secondaryModQueueWebhook";
     case "newposts":
-      return "spectrumOfficialNewPostsWebhook";
+      return "secondaryNewPostsWebhook";
   }
 }
 
 export function displaySubredditLabel(subreddit: MonitoredSubreddit): string {
-  return subreddit === "spectrum_official" ? "r/Spectrum_Official" : "r/Spectrum";
+  return subreddit === "spectrum_official" ? "Secondary Subreddit" : "Primary Subreddit";
 }
 
-export function displaySubredditFromName(subredditName: string): string {
-  const group = resolveSubredditGroup(subredditName);
-  if (!group) {
-    return subredditName;
-  }
+export function displaySubredditFromName(subredditName: string, secondarySubredditName?: string | null): string {
+  const group = resolveSubredditGroup(subredditName, secondarySubredditName);
   return displaySubredditLabel(group);
 }
 

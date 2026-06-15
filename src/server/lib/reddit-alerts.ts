@@ -31,6 +31,7 @@ import {
 import type {
   DiscordEmbed,
   DiscordEmbedField,
+  DiscordWebhookPayload,
   RedditTicketKeyType,
   TicketRecord,
   TicketSource,
@@ -88,30 +89,30 @@ async function getIgnoreList(): Promise<string[]> {
     .filter(Boolean);
 }
 
+async function getSecondarySubredditName(): Promise<string | null> {
+  const name = ((await settings.get("secondarySubredditName")) as string | undefined)?.trim();
+  return name || null;
+}
+
 async function getWebhookUrl(
   subredditName: string,
   category: WebhookCategory
 ): Promise<string | null> {
-  const settingName = getWebhookSettingName(subredditName, category);
-  if (!settingName) {
-    console.log(`Subreddit "${subredditName}" is not monitored. Skipping webhook.`);
-    return null;
-  }
+  const secondary = await getSecondarySubredditName();
+  const settingName = getWebhookSettingName(subredditName, category, secondary);
 
   let webhook = (await settings.get(settingName)) as string | undefined;
   let resolvedSettingName = settingName;
 
   if (!webhook && category !== "modmail") {
-    const modmailSettingName = getWebhookSettingName(subredditName, "modmail");
-    if (modmailSettingName) {
-      const modmailWebhook = (await settings.get(modmailSettingName)) as string | undefined;
-      if (modmailWebhook) {
-        webhook = modmailWebhook;
-        resolvedSettingName = modmailSettingName;
-        console.log(
-          `No webhook configured for "${settingName}"; using "${modmailSettingName}" as fallback for ${category}.`
-        );
-      }
+    const modmailSettingName = getWebhookSettingName(subredditName, "modmail", secondary);
+    const modmailWebhook = (await settings.get(modmailSettingName)) as string | undefined;
+    if (modmailWebhook) {
+      webhook = modmailWebhook;
+      resolvedSettingName = modmailSettingName;
+      console.log(
+        `No webhook configured for "${settingName}"; using "${modmailSettingName}" as fallback for ${category}.`
+      );
     }
   }
 
@@ -162,10 +163,8 @@ async function getNewAccountWarning(username: string): Promise<string | undefine
 }
 
 async function getClosedWebhookUrl(subredditName: string): Promise<string | null> {
-  const settingName = getClosedWebhookSettingName(subredditName);
-  if (!settingName) {
-    return null;
-  }
+  const secondary = await getSecondarySubredditName();
+  const settingName = getClosedWebhookSettingName(subredditName, secondary);
 
   const webhook = (await settings.get(settingName)) as string | undefined;
   if (!webhook) {
@@ -391,10 +390,8 @@ async function sendTicketAlert(options: {
     return;
   }
 
-  const subreddit = resolveSubredditGroup(options.subredditName);
-  if (!subreddit) {
-    return;
-  }
+  const secondary = await getSecondarySubredditName();
+  const subreddit = resolveSubredditGroup(options.subredditName, secondary);
 
   if (options.redditKey && options.redditKeyType) {
     await unlinkRedditKey(options.redditKeyType, options.redditKey);
@@ -1004,10 +1001,11 @@ export async function sendPostUpdateFollowUpToTicket(event: PostUpdate): Promise
 export async function trackModMailForReport(event: ModMail): Promise<void> {
   const subredditName =
     event.conversationSubreddit?.name ?? event.destinationSubreddit?.name ?? "";
-  const subreddit = getMonitoredSubredditKey(subredditName);
-  if (!subreddit) {
+  if (!subredditName) {
     return;
   }
+  const secondary = await getSecondarySubredditName();
+  const subreddit = getMonitoredSubredditKey(subredditName, secondary)!;
 
   const conversationId = event.conversationId;
   if (!conversationId) {
@@ -1074,10 +1072,11 @@ export async function trackModQueueForReport(
     | ({ type: "AutomoderatorFilterComment" } & AutomoderatorFilterComment)
 ): Promise<void> {
   const subredditName = event.subreddit?.name ?? "";
-  const subreddit = getMonitoredSubredditKey(subredditName);
-  if (!subreddit) {
+  if (!subredditName) {
     return;
   }
+  const secondary = await getSecondarySubredditName();
+  const subreddit = getMonitoredSubredditKey(subredditName, secondary)!;
 
   const store = await getDailyReportStore();
   getMetrics(store, subreddit).modQueueFlagged += 1;
@@ -1087,11 +1086,11 @@ export async function trackModQueueForReport(
 export async function trackPostSubmitForReport(event: PostSubmit): Promise<void> {
   const subredditName = event.subreddit?.name ?? "";
   const post = event.post;
-  const subreddit = getMonitoredSubredditKey(subredditName);
-
-  if (!subreddit || !post) {
+  if (!subredditName || !post) {
     return;
   }
+  const secondary = await getSecondarySubredditName();
+  const subreddit = getMonitoredSubredditKey(subredditName, secondary)!;
 
   const store = await getDailyReportStore();
   const metrics = getMetrics(store, subreddit);
@@ -1127,11 +1126,10 @@ export async function trackPostSubmitForReport(event: PostSubmit): Promise<void>
 
 export async function trackCommentSubmitForReport(event: CommentSubmit): Promise<void> {
   const subredditName = event.subreddit?.name ?? "";
-  const subreddit = getMonitoredSubredditKey(subredditName);
   const postId = toPostId(event.comment?.postId ?? event.post?.id ?? "");
   const authorName = event.author?.name ?? event.comment?.author ?? "";
 
-  if (!subreddit || !postId || !authorName) {
+  if (!subredditName || !postId || !authorName) {
     return;
   }
 
@@ -1169,12 +1167,13 @@ export async function trackCommentSubmitForReport(event: CommentSubmit): Promise
 
 export async function trackModActionForReport(event: ModAction): Promise<void> {
   const subredditName = event.subreddit?.name ?? "";
-  const subreddit = getMonitoredSubredditKey(subredditName);
   const action = (event.action ?? "").toLowerCase();
 
-  if (!subreddit || !action) {
+  if (!subredditName || !action) {
     return;
   }
+  const secondary = await getSecondarySubredditName();
+  const subreddit = getMonitoredSubredditKey(subredditName, secondary)!;
 
   const store = await getDailyReportStore();
   const metrics = getMetrics(store, subreddit);
