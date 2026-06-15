@@ -1,0 +1,51 @@
+# Privacy Policy
+
+**ModMailManager**  
+Last updated: June 2026
+
+## 1. Overview
+
+ModMailManager ("the App") is a Reddit Devvit application. This Privacy Policy describes what information the App accesses and how it is used.
+
+## 2. Information the App Accesses
+
+The App accesses the following information through Reddit's Devvit platform:
+
+- **Modmail messages** — subject, body, author, and participant information for modmail conversations in your subreddit
+- **New post submissions** — post title, body, author, flair, and permalink
+- **Mod queue items** — reported or AutoMod-filtered posts and comments, including content previews, author names, and report reasons
+- **Reddit user information** — account age and karma, used to generate new account warnings on modmail alerts
+
+## 3. How Information Is Used
+
+- Modmail, post, and mod queue data is formatted into Discord embed messages and sent to the Discord webhook URLs configured by the subreddit moderators.
+- Ticket state (claim status, assignee, action history) is stored temporarily in Devvit's Redis storage to support interactive Discord ticket management.
+- Aggregated moderation metrics (message counts, response times, ticket action counts) are stored temporarily in Devvit's Redis storage and used to generate daily moderation reports.
+- All stored data is scoped to the subreddit installation and is reset after each daily report cycle.
+
+## 4. Information Shared
+
+- Modmail and moderation data is forwarded only to the Discord webhook URLs and channels that the subreddit moderators configure in the App settings.
+- No data is sold, rented, or shared with any third party beyond the Discord channels configured by the moderators.
+
+## 5. Data Retention
+
+- Ticket records and report metrics are stored in Devvit's Redis storage and are automatically cleared after each daily reporting cycle or when tickets are closed.
+- The App does not maintain a long-term database of modmail content or user information.
+
+## 6. Security
+
+- Discord webhook URLs and bot tokens are stored in Devvit's encrypted settings storage.
+- Moderators are responsible for keeping their webhook URLs and bot tokens secure.
+
+## 7. Children's Privacy
+
+The App is intended for use by Reddit moderators and is not directed at children under 13.
+
+## 8. Changes to This Policy
+
+This Privacy Policy may be updated at any time. The "Last updated" date at the top of this page will reflect any changes.
+
+## 9. Contact
+
+For questions about this Privacy Policy, open an issue on the [GitHub repository](https://github.com/MissSicariaTest/ModMailManager).
