@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "modmailtodiscord",
+  "name": "modmailmanager",
   "server": {
     "dir": "dist/server",
     "entry": "index.cjs"

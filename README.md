@@ -2,7 +2,7 @@
 
 A Devvit [(Reddit's Developer Platform)](https://developers.reddit.com/) app that instantly sends incoming and outgoing modmails from your subreddit's modmail to a Discord or Slack webhook. Sends the message, sender, participant information, &amp; other relevant information to the webhook payload.
 
-App Link: https://developers.reddit.com/apps/modmailtodiscord
+App Link: https://developers.reddit.com/apps/modmailmanager
 
 
 ## Screenshots
@@ -31,13 +31,13 @@ App Link: https://developers.reddit.com/apps/modmailtodiscord
 
 </details>
 
-2. **Put The URL In Your App Settings** : After you've obtained the webhook URL, you'll need to put it in the app settings. App settings can be found at `https://developers.reddit.com/r/insert-your-subreddit-name-here/apps/modmailtodiscord/`. After putting the Webhook URL in the text-box - click on the Save Changes button.
+2. **Put The URL In Your App Settings** : After you've obtained the webhook URL, you'll need to put it in the app settings. App settings can be found at `https://developers.reddit.com/r/insert-your-subreddit-name-here/apps/modmailmanager/`. After putting the Webhook URL in the text-box - click on the Save Changes button.
 
 ### Slack
 
 1. **Get Slack Webhook URL** : You'll need to obtain a Webhook URL to send the messages to a particular channel of your workspace - [here's a guide](https://api.slack.com/messaging/webhooks) on how to obtain the Slack Webhook URL. Slack Webhook URLs look like `https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX`.
 
-2. **Put The URL In Your App Settings** : After you have obtained the webhook URL, you'll need to put it in the app settings. App settings can be found at `https://developers.reddit.com/r/insert-your-subreddit-name-here/apps/modmailtodiscord/`. After putting the Webhook URL in the text-box - click on the Save Changes button.
+2. **Put The URL In Your App Settings** : After you have obtained the webhook URL, you'll need to put it in the app settings. App settings can be found at `https://developers.reddit.com/r/insert-your-subreddit-name-here/apps/modmailmanager/`. After putting the Webhook URL in the text-box - click on the Save Changes button.
 
 ## Details
 
