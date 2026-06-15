@@ -24,7 +24,7 @@
       "spectrumModmailWebhook": {
         "type": "string",
         "label": "Discord Webhook 1 — Modmail",
-        "helpText": "Modmail alerts for your primary community. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank. For Claim/Close buttons, use a webhook created by your Discord application."
+        "helpText": "Modmail alerts for your primary community. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank. Add your Discord Bot Token below to enable buttons."
       },
       "spectrumOfficialModmailWebhook": {
         "type": "string",
@@ -69,6 +69,11 @@
         "type": "string",
         "label": "Cloudflare Worker shared secret",
         "helpText": "Same random string set as WORKER_SECRET in Cloudflare. Required so button clicks can find the matching ticket."
+      },
+      "discordBotToken": {
+        "type": "string",
+        "label": "Discord Bot Token",
+        "helpText": "Required for Claim/Close/Reassign buttons. From Discord Developer Portal → Bot → Reset Token. Must be the same application as your Interactions Endpoint. Also add as DISCORD_BOT_TOKEN on your Cloudflare Worker."
       },
       "outgoing": {
         "type": "boolean",

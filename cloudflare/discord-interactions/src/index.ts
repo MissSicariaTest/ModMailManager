@@ -7,6 +7,7 @@ export interface Env {
   TICKETS: KVNamespace;
   REPORT: KVNamespace;
   DISCORD_PUBLIC_KEY: string;
+  DISCORD_BOT_TOKEN?: string;
   WORKER_SECRET: string;
 }
 
@@ -225,7 +226,7 @@ async function handleButton(interaction: DiscordInteraction, env: Env): Promise<
 
   const updated = await applyTicketAction(env, ticket, parsed.action, actor);
   await trackAction(env, updated.subreddit, parsed.action, actor.username);
-  await editWebhookMessage(updated);
+  await editTicketMessage(updated, env);
   return Response.json(buildUpdateMessageResponse(updated));
 }
 
@@ -260,7 +261,7 @@ async function handleModal(interaction: DiscordInteraction, env: Env): Promise<R
 
   const updated = await applyTicketAction(env, ticket, "reassign", actor, assigneeName);
   await trackAction(env, updated.subreddit, "reassign", actor.username);
-  await editWebhookMessage(updated);
+  await editTicketMessage(updated, env);
   return Response.json(buildUpdateMessageResponse(updated));
 }
 
@@ -562,6 +563,36 @@ function buildUpdateMessageResponse(ticket: TicketRecord): unknown {
       components: buildTicketButtons(ticket.id, ticket.status),
     },
   };
+}
+
+async function editTicketMessage(ticket: TicketRecord, env: Env): Promise<boolean> {
+  const payload = {
+    embeds: [buildTicketEmbed(ticket)],
+    components: buildTicketButtons(ticket.id, ticket.status),
+  };
+
+  if (env.DISCORD_BOT_TOKEN && ticket.channelId && ticket.messageId) {
+    const response = await fetch(
+      `https://discord.com/api/v10/channels/${ticket.channelId}/messages/${ticket.messageId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (response.ok) {
+      return true;
+    }
+
+    const body = await response.text().catch(() => "");
+    console.error(`Bot message edit failed: ${response.status} ${body}`);
+  }
+
+  return editWebhookMessage(ticket);
 }
 
 async function editWebhookMessage(ticket: TicketRecord): Promise<boolean> {

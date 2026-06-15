@@ -37,12 +37,14 @@ import {
   buildTicketEmbed,
   createTicketId,
   getErrorMessage,
+  getWebhookChannelId,
   isDiscordWebhook,
   messageHasInteractiveButtons,
   parseWebhookUrl,
   previewText,
   redditPermalinkUrl,
   redditProfileUrl,
+  sendDiscordBotMessage,
   sendDiscordWebhook,
   sleep,
   truncateField,
@@ -185,13 +187,34 @@ async function sendTicketAlert(options: {
     components: buildTicketButtons(ticketId, "open"),
   };
 
-  let message = await sendDiscordWebhook(options.webhook, payload, true);
-  let buttonsAttached = message ? messageHasInteractiveButtons(message) : false;
+  const botToken = ((await settings.get("discordBotToken")) as string | undefined)?.trim();
+  let message: Awaited<ReturnType<typeof sendDiscordWebhook>> = null;
+  let buttonsAttached = false;
 
-  if (message && payload.components && !buttonsAttached) {
-    console.error(
-      "Discord accepted the alert but removed interactive buttons. Buttons require a webhook created by your Discord application (not a channel-only webhook)."
-    );
+  if (botToken) {
+    const channelId = await getWebhookChannelId(parsed.id, parsed.token);
+    if (channelId) {
+      message = await sendDiscordBotMessage(botToken, channelId, payload);
+      buttonsAttached = message ? messageHasInteractiveButtons(message) : false;
+      if (message && !buttonsAttached) {
+        console.error(
+          "Discord bot message was sent without interactive buttons. Confirm the bot is in the server, can send messages in the channel, and belongs to the same application as your Interactions Endpoint."
+        );
+      }
+    } else {
+      console.error("Could not resolve the Discord channel from the webhook URL for bot delivery.");
+    }
+  }
+
+  if (!message) {
+    message = await sendDiscordWebhook(options.webhook, payload, true);
+    buttonsAttached = message ? messageHasInteractiveButtons(message) : false;
+
+    if (message && payload.components && !buttonsAttached) {
+      console.error(
+        "Discord accepted the alert but removed interactive buttons. Add your Discord Bot Token in app settings to enable buttons with regular channel webhooks."
+      );
+    }
   }
 
   if (!message) {

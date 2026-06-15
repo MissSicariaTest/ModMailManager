@@ -39,6 +39,7 @@ Also click **Clear build cache** under Build settings, then create a **new** dep
    - Copy both namespace IDs into `wrangler.toml` (replace `REPLACE_WITH_*`)
 7. **Settings → Variables** (secrets):
    - `DISCORD_PUBLIC_KEY` — from Discord Developer Portal → General Information → Public Key
+   - `DISCORD_BOT_TOKEN` — from Discord Developer Portal → Bot → Token (same app as Interactions Endpoint)
    - `WORKER_SECRET` — generate a long random string (same value goes in Reddit app settings)
 8. Deploy. Copy the worker URL, e.g. `https://spectrum-modmail-discord.your-subdomain.workers.dev`
 
@@ -67,8 +68,15 @@ If buttons are missing on alerts, the notification still works but ticket action
 | Setting | Value |
 |---------|--------|
 | `discordApplicationPublicKey` | Discord Public Key (optional backup; worker uses its own secret) |
+| `discordBotToken` | Discord Bot Token (same app as Interactions Endpoint; also set `DISCORD_BOT_TOKEN` on Worker) |
 | `discordInteractionsWorkerUrl` | Worker URL (no trailing slash) |
 | `discordInteractionsWorkerSecret` | Same string as Cloudflare `WORKER_SECRET` |
+
+### Why buttons may be missing
+
+Regular channel webhooks (Integrations → Webhooks in Discord) send alerts but **remove interactive buttons**.
+
+**Fix:** Add your **Discord Bot Token** in Reddit app settings and Cloudflare `DISCORD_BOT_TOKEN`. The app sends alerts through your bot so Claim/Close/Reassign buttons appear, while still using your existing webhook URLs to find the right channel.
 
 Request **`workers.dev`** in Devvit developer settings if ticket registration from Reddit fails with `PERMISSION_DENIED`.
 

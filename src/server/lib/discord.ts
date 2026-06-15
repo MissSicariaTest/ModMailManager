@@ -193,6 +193,45 @@ export function buildTicketPayload(ticket: TicketRecord): DiscordWebhookPayload 
   };
 }
 
+export async function getWebhookChannelId(
+  webhookId: string,
+  webhookToken: string
+): Promise<string | null> {
+  const response = await fetch(`https://discord.com/api/v10/webhooks/${webhookId}/${webhookToken}`);
+  if (!response.ok) {
+    console.error(`Unable to resolve webhook channel: ${response.status}`);
+    return null;
+  }
+
+  const data = (await response.json()) as { channel_id?: string };
+  return data.channel_id ?? null;
+}
+
+export async function sendDiscordBotMessage(
+  botToken: string,
+  channelId: string,
+  payload: DiscordWebhookPayload
+): Promise<DiscordWebhookMessage | null> {
+  const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.error(
+      `Error sending bot message to Discord: ${response.status} ${response.statusText} ${body}`
+    );
+    return null;
+  }
+
+  return (await response.json()) as DiscordWebhookMessage;
+}
+
 export function buildWebhookRequestUrl(
   webhook: string,
   options?: { wait?: boolean; withComponents?: boolean }
