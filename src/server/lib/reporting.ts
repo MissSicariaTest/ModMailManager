@@ -22,7 +22,11 @@ import {
   truncateTitle,
 } from "./discord.js";
 import { countOpenUnclaimedTickets } from "./tickets.js";
-import { fetchWorkerReportSnapshot, type WorkerReportSnapshot } from "./worker-client.js";
+import {
+  fetchWorkerReportSnapshot,
+  resetWorkerReportSnapshot,
+  type WorkerReportSnapshot,
+} from "./worker-client.js";
 
 const SPECTRUM_BLUE = 0x005fff;
 
@@ -483,6 +487,7 @@ export async function maybeSendDailyReport(): Promise<void> {
   await sendDailyReport();
   await redis.set(DAILY_REPORT_SENT_REDIS_KEY, todayKey);
   await resetDailyReportStore();
+  await resetWorkerReportSnapshot();
 }
 
 export async function sendDailyReport(): Promise<void> {

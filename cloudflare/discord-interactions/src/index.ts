@@ -97,6 +97,10 @@ export default {
       return getReportSnapshot(request, env);
     }
 
+    if (request.method === "POST" && url.pathname === "/api/report/reset") {
+      return resetReportSnapshot(request, env);
+    }
+
     if (request.method === "POST" && (url.pathname === "/" || url.pathname === "/discord/interactions")) {
       return handleDiscordInteraction(request, env);
     }
@@ -140,6 +144,15 @@ async function getReportSnapshot(request: Request, env: Env): Promise<Response> 
   return new Response(raw, {
     headers: { "Content-Type": "application/json" },
   });
+}
+
+async function resetReportSnapshot(request: Request, env: Env): Promise<Response> {
+  if (!authorizeWorker(request, env)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  await env.REPORT.put("snapshot", JSON.stringify(createEmptySnapshot()));
+  return Response.json({ ok: true });
 }
 
 async function handleDiscordInteraction(request: Request, env: Env): Promise<Response> {

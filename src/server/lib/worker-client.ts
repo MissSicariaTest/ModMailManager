@@ -93,6 +93,23 @@ export async function fetchWorkerReportSnapshot(): Promise<WorkerReportSnapshot 
 }
 
 export async function resetWorkerReportSnapshot(): Promise<void> {
-  // Worker accumulates until Devvit reads; reset by posting empty snapshot is optional.
-  // Daily report reset clears Devvit Redis; worker snapshot resets on next period via register only.
+  const config = await getWorkerConfig();
+  if (!config) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${config.url}/api/report/reset`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.secret}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Worker report reset failed: ${response.status}`);
+    }
+  } catch (error) {
+    console.error("Worker report reset error:", getErrorMessage(error));
+  }
 }
