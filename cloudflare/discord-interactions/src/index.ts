@@ -15,6 +15,7 @@ export interface Env {
 
 type TicketAction =
   | "claim"
+  | "unclaim"
   | "close"
   | "reopen"
   | "resolved"
@@ -52,6 +53,7 @@ type TicketRecord = {
 
 const TICKET_ACTIONS: TicketAction[] = [
   "claim",
+  "unclaim",
   "close",
   "reopen",
   "resolved",
@@ -61,6 +63,7 @@ const TICKET_ACTIONS: TicketAction[] = [
 
 const BUTTON_LABELS: Record<TicketAction, string> = {
   claim: "Claim",
+  unclaim: "Unclaim",
   close: "Close",
   reopen: "Reopen",
   resolved: "Resolved",
@@ -70,6 +73,7 @@ const BUTTON_LABELS: Record<TicketAction, string> = {
 
 const ACTION_FIELD_LABELS: Record<TicketAction, string> = {
   claim: "Claimed",
+  unclaim: "Unclaimed",
   close: "Closed",
   reopen: "Reopened",
   resolved: "Resolved",
@@ -255,7 +259,7 @@ type DiscordInteraction = {
   message?: DiscordInteractionMessage;
   data?: {
     custom_id?: string;
-    components?: Array<{ components?: Array<{ value?: string }> }>;
+    components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }>;
   };
 };
 
@@ -319,8 +323,7 @@ async function handleModal(
   }
 
   const ticketId = customId.replace("reassign:", "");
-  const assigneeName =
-    interaction.data?.components?.[0]?.components?.[0]?.value?.trim() ?? "";
+  const { assigneeName, assigneeDiscordId } = parseReassignModalValues(interaction);
 
   if (!assigneeName) {
     return interactionResponse(ephemeral("Please enter a team member name."));
@@ -341,13 +344,20 @@ async function handleModal(
     return interactionResponse(ephemeral(err));
   }
 
-  const updated = await applyTicketAction(env, ticket, "reassign", actor, assigneeName);
+  const updated = await applyTicketAction(
+    env,
+    ticket,
+    "reassign",
+    actor,
+    assigneeName,
+    assigneeDiscordId
+  );
   ctx.waitUntil(
     trackAction(env, updated.subreddit, "reassign", actor.username).catch((error) => {
       console.error("Failed to track ticket action:", error);
     })
   );
-  return interactionResponse(buildUpdateMessageResponse(updated));
+  return interactionResponse(buildUpdateMessageResponse(updated, assigneeDiscordId));
 }
 
 async function saveTicket(env: Env, ticket: TicketRecord): Promise<void> {
@@ -510,7 +520,8 @@ async function applyTicketAction(
   ticket: TicketRecord,
   action: TicketAction,
   actor: { id: string; username: string },
-  details?: string
+  details?: string,
+  assigneeDiscordId?: string
 ): Promise<TicketRecord> {
   const now = new Date().toISOString();
   const updated: TicketRecord = {
@@ -534,6 +545,11 @@ async function applyTicketAction(
       updated.assignedTo = actor.username;
       updated.assignedToId = actor.id;
       break;
+    case "unclaim":
+      updated.status = "open";
+      updated.assignedTo = undefined;
+      updated.assignedToId = undefined;
+      break;
     case "close":
       updated.status = "closed";
       break;
@@ -549,6 +565,9 @@ async function applyTicketAction(
     case "reassign":
       updated.status = "claimed";
       updated.assignedTo = details ?? updated.assignedTo;
+      if (assigneeDiscordId) {
+        updated.assignedToId = assigneeDiscordId;
+      }
       break;
   }
 
@@ -668,6 +687,10 @@ function isTicketActionAllowed(ticket: TicketRecord, action: TicketAction): stri
       if (ticket.status === "claimed") return "This ticket is already claimed.";
       if (isClosed || isFinal) return "Closed or finalized tickets cannot be claimed.";
       return null;
+    case "unclaim":
+      if (ticket.status !== "claimed") return "Only claimed tickets can be unclaimed.";
+      if (isClosed || isFinal) return "Closed or finalized tickets cannot be unclaimed.";
+      return null;
     case "close":
       if (isClosed || isFinal) return "This ticket is already closed or finalized.";
       return null;
@@ -738,6 +761,10 @@ function buildTicketButtons(ticketId: string, status: TicketStatus): unknown[] {
         style = 1;
         disabled = status === "claimed" || isClosed || isFinal;
         break;
+      case "unclaim":
+        style = 2;
+        disabled = status !== "claimed" || isClosed || isFinal;
+        break;
       case "close":
         style = 4;
         disabled = isClosed || isFinal;
@@ -770,15 +797,44 @@ function buildTicketButtons(ticketId: string, status: TicketStatus): unknown[] {
   });
 
   return [
-    { type: 1, components: buttons.slice(0, 3) },
-    { type: 1, components: buttons.slice(3) },
+    { type: 1, components: buttons.slice(0, 4) },
+    { type: 1, components: buttons.slice(4) },
   ];
 }
 
-function buildUpdateMessageResponse(ticket: TicketRecord): unknown {
+function normalizeDiscordUserId(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  const mentionMatch = trimmed.match(/^<@!?(\d+)>$/);
+  const digits = mentionMatch?.[1] ?? trimmed.replace(/\D/g, "");
+  return /^\d{17,20}$/.test(digits) ? digits : undefined;
+}
+
+function parseReassignModalValues(interaction: DiscordInteraction): {
+  assigneeName: string;
+  assigneeDiscordId?: string;
+} {
+  const fields =
+    interaction.data?.components?.flatMap((row) => row.components ?? []) ?? [];
+  const assigneeName = fields.find((field) => field.custom_id === "assignee_name")?.value?.trim() ?? "";
+  const assigneeDiscordId = normalizeDiscordUserId(
+    fields.find((field) => field.custom_id === "assignee_discord_id")?.value
+  );
+
+  return { assigneeName, assigneeDiscordId };
+}
+
+function buildUpdateMessageResponse(ticket: TicketRecord, pingUserId?: string): unknown {
   return {
     type: 7,
     data: {
+      content: pingUserId
+        ? `<@${pingUserId}> You have been assigned this ticket.`
+        : undefined,
+      allowed_mentions: pingUserId ? { parse: [], users: [pingUserId] } : undefined,
       embeds: [buildTicketEmbed(ticket)],
       components: buildTicketButtons(ticket.id, ticket.status),
     },
@@ -804,6 +860,21 @@ function buildReassignModal(ticketId: string): unknown {
               max_length: 100,
               placeholder: "Enter the name of the team member",
               required: true,
+            },
+          ],
+        },
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: "assignee_discord_id",
+              label: "Discord User ID",
+              style: 1,
+              min_length: 0,
+              max_length: 25,
+              placeholder: "Right-click user → Copy User ID (for ping)",
+              required: false,
             },
           ],
         },

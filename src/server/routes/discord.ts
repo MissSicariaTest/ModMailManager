@@ -8,6 +8,7 @@ import {
   buildUpdateMessageResponse,
   getErrorMessage,
   getInteractionUser,
+  parseReassignModalValues,
   parseTicketCustomId,
   verifyDiscordSignature,
 } from "../lib/discord.js";
@@ -99,8 +100,7 @@ async function handleModalSubmit(
   }
 
   const ticketId = customId.replace("reassign:", "");
-  const assigneeName =
-    interaction.data?.components?.[0]?.components?.[0]?.value?.trim() ?? "";
+  const { assigneeName, assigneeDiscordId } = parseReassignModalValues(interaction);
 
   if (!assigneeName) {
     return c.json(buildEphemeralResponse("Please enter a team member name."), 200);
@@ -122,7 +122,13 @@ async function handleModalSubmit(
     return c.json(buildEphemeralResponse(validationError), 200);
   }
 
-  const updated = await applyTicketAction(ticket, action, actor, assigneeName);
+  const updated = await applyTicketAction(
+    ticket,
+    action,
+    actor,
+    assigneeName,
+    assigneeDiscordId
+  );
   await trackTicketActionForReport(updated.subreddit, action, actor.username);
-  return c.json(buildUpdateMessageResponse(updated), 200);
+  return c.json(buildUpdateMessageResponse(updated, assigneeDiscordId), 200);
 }

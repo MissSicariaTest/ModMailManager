@@ -5,6 +5,7 @@ import {
   buildUpdateMessageResponse,
   buildWebhookRequestUrl,
   messageHasInteractiveButtons,
+  normalizeDiscordUserId,
   parseTicketCustomId,
 } from "./discord.js";
 import type { TicketRecord } from "../../shared/types.js";
@@ -39,12 +40,20 @@ describe("ticket buttons", () => {
 
     expect(labels).toEqual([
       "Claim",
+      "Unclaim",
       "Close",
       "Reopen",
       "Resolved",
       "Unresolved",
       "Reassign",
     ]);
+  });
+
+  it("disables unclaim when a ticket is open", () => {
+    const rows = buildTicketButtons("t_test123", "open");
+    const unclaim = rows.flatMap((row) => row.components).find((button) => button.label === "Unclaim");
+
+    expect(unclaim?.disabled).toBe(true);
   });
 
   it("disables claim after a ticket is claimed", () => {
@@ -86,24 +95,29 @@ describe("ticket embed updates", () => {
     expect(embed.fields?.find((field) => field.name === "Assigned To")?.value).toBe("ModOne");
   });
 
-  it("returns an in-place Discord interaction update payload", () => {
+  it("returns an in-place Discord interaction update payload with optional ping", () => {
     const response = buildUpdateMessageResponse(
       createTicket({
-        status: "resolved",
-        actionLog: [
-          {
-            action: "resolved",
-            discordUserId: "2",
-            discordUsername: "ModTwo",
-            timestamp: "2026-06-12T12:10:00.000Z",
-          },
-        ],
-      })
-    ) as { type: number; data: { embeds: unknown[]; components: unknown[] } };
+        status: "claimed",
+        assignedTo: "ModTwo",
+      }),
+      "123456789012345678"
+    ) as {
+      type: number;
+      data: { content?: string; allowed_mentions?: { users: string[] }; embeds: unknown[]; components: unknown[] };
+    };
 
     expect(response.type).toBe(7);
+    expect(response.data.content).toContain("123456789012345678");
+    expect(response.data.allowed_mentions?.users).toEqual(["123456789012345678"]);
     expect(response.data.embeds).toHaveLength(1);
     expect(response.data.components).toHaveLength(2);
+  });
+
+  it("normalizes Discord user IDs for reassignment pings", () => {
+    expect(normalizeDiscordUserId("<@123456789012345678>")).toBe("123456789012345678");
+    expect(normalizeDiscordUserId("123456789012345678")).toBe("123456789012345678");
+    expect(normalizeDiscordUserId("not-an-id")).toBeUndefined();
   });
 });
 

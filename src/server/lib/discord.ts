@@ -87,6 +87,10 @@ export function buildTicketButtons(ticketId: string, status: TicketStatus): Disc
         style = 1;
         disabled = status === "claimed" || isClosed || isFinal;
         break;
+      case "unclaim":
+        style = 2;
+        disabled = status !== "claimed" || isClosed || isFinal;
+        break;
       case "close":
         style = 4;
         disabled = isClosed || isFinal;
@@ -119,8 +123,8 @@ export function buildTicketButtons(ticketId: string, status: TicketStatus): Disc
   });
 
   return [
-    { type: 1, components: buttons.slice(0, 3) },
-    { type: 1, components: buttons.slice(3) },
+    { type: 1, components: buttons.slice(0, 4) },
+    { type: 1, components: buttons.slice(4) },
   ];
 }
 
@@ -361,6 +365,32 @@ export function getInteractionUser(interaction: {
   };
 }
 
+export function normalizeDiscordUserId(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  const mentionMatch = trimmed.match(/^<@!?(\d+)>$/);
+  const digits = mentionMatch?.[1] ?? trimmed.replace(/\D/g, "");
+  return /^\d{17,20}$/.test(digits) ? digits : undefined;
+}
+
+export function parseReassignModalValues(interaction: {
+  data?: {
+    components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }>;
+  };
+}): { assigneeName: string; assigneeDiscordId?: string } {
+  const fields =
+    interaction.data?.components?.flatMap((row) => row.components ?? []) ?? [];
+  const assigneeName = fields.find((field) => field.custom_id === "assignee_name")?.value?.trim() ?? "";
+  const assigneeDiscordId = normalizeDiscordUserId(
+    fields.find((field) => field.custom_id === "assignee_discord_id")?.value
+  );
+
+  return { assigneeName, assigneeDiscordId };
+}
+
 export function buildReassignModal(ticketId: string) {
   return {
     type: 9,
@@ -383,16 +413,35 @@ export function buildReassignModal(ticketId: string) {
             },
           ],
         },
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: "assignee_discord_id",
+              label: "Discord User ID",
+              style: 1,
+              min_length: 0,
+              max_length: 25,
+              placeholder: "Right-click user → Copy User ID (for ping)",
+              required: false,
+            },
+          ],
+        },
       ],
     },
   };
 }
 
-export function buildUpdateMessageResponse(ticket: TicketRecord) {
+export function buildUpdateMessageResponse(ticket: TicketRecord, pingUserId?: string) {
   const payload = buildTicketPayload(ticket);
   return {
     type: 7,
     data: {
+      content: pingUserId
+        ? `<@${pingUserId}> You have been assigned this ticket.`
+        : undefined,
+      allowed_mentions: pingUserId ? { parse: [] as string[], users: [pingUserId] } : undefined,
       embeds: payload.embeds,
       components: payload.components,
     },

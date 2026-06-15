@@ -60,7 +60,8 @@ export async function applyTicketAction(
   ticket: TicketRecord,
   action: TicketAction,
   actor: { id: string; username: string },
-  details?: string
+  details?: string,
+  assigneeDiscordId?: string
 ): Promise<TicketRecord> {
   const now = new Date().toISOString();
   const logEntry: TicketActionLog = {
@@ -83,6 +84,11 @@ export async function applyTicketAction(
       updated.assignedTo = actor.username;
       updated.assignedToId = actor.id;
       break;
+    case "unclaim":
+      updated.status = "open";
+      updated.assignedTo = undefined;
+      updated.assignedToId = undefined;
+      break;
     case "close":
       updated.status = "closed";
       break;
@@ -98,6 +104,9 @@ export async function applyTicketAction(
     case "reassign":
       updated.status = "claimed";
       updated.assignedTo = details ?? updated.assignedTo;
+      if (assigneeDiscordId) {
+        updated.assignedToId = assigneeDiscordId;
+      }
       break;
   }
 
@@ -119,6 +128,14 @@ export function isTicketActionAllowed(
       }
       if (isClosed || isFinal) {
         return "Closed or finalized tickets cannot be claimed.";
+      }
+      return null;
+    case "unclaim":
+      if (ticket.status !== "claimed") {
+        return "Only claimed tickets can be unclaimed.";
+      }
+      if (isClosed || isFinal) {
+        return "Closed or finalized tickets cannot be unclaimed.";
       }
       return null;
     case "close":

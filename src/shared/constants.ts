@@ -38,6 +38,7 @@ export const MOD_QUEUE_REMOVE_ACTIONS = new Set([
 
 export const TICKET_ACTIONS = [
   "claim",
+  "unclaim",
   "close",
   "reopen",
   "resolved",
@@ -49,6 +50,7 @@ export type TicketAction = (typeof TICKET_ACTIONS)[number];
 
 export const BUTTON_LABELS: Record<TicketAction, string> = {
   claim: "Claim",
+  unclaim: "Unclaim",
   close: "Close",
   reopen: "Reopen",
   resolved: "Resolved",
@@ -58,6 +60,7 @@ export const BUTTON_LABELS: Record<TicketAction, string> = {
 
 export const ACTION_FIELD_LABELS: Record<TicketAction, string> = {
   claim: "Claimed",
+  unclaim: "Unclaimed",
   close: "Closed",
   reopen: "Reopened",
   resolved: "Resolved",
