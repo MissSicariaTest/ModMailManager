@@ -41,6 +41,9 @@ Also click **Clear build cache** under Build settings, then create a **new** dep
    - `DISCORD_PUBLIC_KEY` — from Discord Developer Portal → General Information → **Public Key**
    - `DISCORD_BOT_TOKEN` — from Discord Developer Portal → Bot → Token
    - `WORKER_SECRET` — generate a long random string (same value goes in Reddit app settings)
+   - Optional fallback if Reddit sync is unavailable:
+     - `CLOSED_TICKETS_WEBHOOK_SPECTRUM` — full Discord webhook URL for Webhook 7
+     - `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` — full Discord webhook URL for Webhook 8
 8. Deploy. Copy the worker URL, e.g. `https://modmail.your-subdomain.workers.dev`
 
 Check configuration anytime: `GET https://your-worker.workers.dev/api/health`

@@ -74,7 +74,7 @@ import {
   saveTicket,
   unlinkRedditKey,
 } from "./tickets.js";
-import { fetchTicketFromWorker, registerTicketWithWorker } from "./worker-client.js";
+import { fetchTicketFromWorker, registerTicketWithWorker, syncClosedWebhooksToWorker } from "./worker-client.js";
 
 function toPostId(id: string): `t3_${string}` {
   return (id.startsWith("t3_") ? id : `t3_${id}`) as `t3_${string}`;
@@ -383,6 +383,8 @@ async function sendTicketAlert(options: {
   redditKeyType?: RedditTicketKeyType;
   threadName?: string;
 }): Promise<void> {
+  void syncClosedWebhooksToWorker();
+
   const parsed = parseWebhookUrl(options.webhook);
   if (!parsed) {
     console.error("Unable to parse Discord webhook URL for ticket tracking.");

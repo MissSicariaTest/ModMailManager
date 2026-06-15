@@ -29,6 +29,7 @@ import {
   trackPostSubmitForReport,
 } from "../lib/reddit-alerts.js";
 import { getErrorMessage } from "../lib/discord.js";
+import { syncClosedWebhooksToWorker } from "../lib/worker-client.js";
 
 export const triggers = new Hono();
 
@@ -41,10 +42,12 @@ function error(message: string): TriggerResponse {
 }
 
 triggers.post("/on-app-install", async (c) => {
+  await syncClosedWebhooksToWorker();
   return c.json(success("App installed."), 200);
 });
 
 triggers.post("/on-app-upgrade", async (c) => {
+  await syncClosedWebhooksToWorker();
   return c.json(success("App upgraded."), 200);
 });
 

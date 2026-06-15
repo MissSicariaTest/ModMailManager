@@ -73,7 +73,7 @@
       "discordInteractionsWorkerUrl": {
         "type": "string",
         "label": "Cloudflare Worker URL (optional)",
-        "helpText": "Optional. Used only for daily report ticket metrics. Button actions (Claim, Close, etc.) run entirely in Discord and do not use Reddit."
+        "helpText": "Optional but recommended. Syncs closed-ticket webhooks (Webhook 7/8) to the Worker and powers daily report ticket metrics."
       },
       "discordInteractionsWorkerSecret": {
         "type": "string",

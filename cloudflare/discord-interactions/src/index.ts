@@ -11,6 +11,8 @@ export interface Env {
   DISCORD_PUBLIC_KEY: string;
   DISCORD_BOT_TOKEN?: string;
   WORKER_SECRET: string;
+  CLOSED_TICKETS_WEBHOOK_SPECTRUM?: string;
+  CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL?: string;
 }
 
 type TicketAction =
@@ -103,6 +105,17 @@ const STATUS_COLORS: Record<string, number> = {
 
 const FIELD_LENGTH = 1024;
 const OPEN_TICKETS_KEY = "tickets:open";
+const CLOSED_WEBHOOKS_CONFIG_KEY = "config:closedWebhooks";
+
+type ClosedWebhookCredentials = {
+  webhookId: string;
+  webhookToken: string;
+};
+
+type ClosedWebhookConfig = {
+  spectrum?: ClosedWebhookCredentials | null;
+  spectrum_official?: ClosedWebhookCredentials | null;
+};
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -110,6 +123,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/tickets/register") {
       return registerTicket(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/config/closed-webhooks") {
+      return syncClosedWebhooksConfig(request, env);
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/api/tickets/")) {
@@ -160,8 +177,22 @@ function getHealthStatus(env: Env): Response {
       DISCORD_PUBLIC_KEY: isSecretConfigured(env.DISCORD_PUBLIC_KEY),
       WORKER_SECRET: isSecretConfigured(env.WORKER_SECRET),
       DISCORD_BOT_TOKEN: isSecretConfigured(env.DISCORD_BOT_TOKEN),
+      CLOSED_TICKETS_WEBHOOK_SPECTRUM: isSecretConfigured(env.CLOSED_TICKETS_WEBHOOK_SPECTRUM),
+      CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL: isSecretConfigured(
+        env.CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL
+      ),
     },
   });
+}
+
+async function syncClosedWebhooksConfig(request: Request, env: Env): Promise<Response> {
+  if (!authorizeWorker(request, env)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const config = (await request.json()) as ClosedWebhookConfig;
+  await env.TICKETS.put(CLOSED_WEBHOOKS_CONFIG_KEY, JSON.stringify(config));
+  return Response.json({ ok: true });
 }
 
 async function getTicketById(request: Request, env: Env, ticketId: string): Promise<Response> {
@@ -975,21 +1006,89 @@ function buildTicketMessagePayload(ticket: TicketRecord): Record<string, unknown
   };
 }
 
+function parseWebhookUrl(webhookUrl: string): ClosedWebhookCredentials | null {
+  const match = webhookUrl.trim().match(/\/api\/webhooks\/(\d+)\/([^/?]+)/);
+  if (!match) {
+    return null;
+  }
+  return {
+    webhookId: match[1],
+    webhookToken: match[2],
+  };
+}
+
+async function getClosedWebhookConfig(env: Env): Promise<ClosedWebhookConfig | null> {
+  const raw = await env.TICKETS.get(CLOSED_WEBHOOKS_CONFIG_KEY);
+  return raw ? (JSON.parse(raw) as ClosedWebhookConfig) : null;
+}
+
+function getClosedWebhookFromEnv(
+  env: Env,
+  subreddit: string
+): ClosedWebhookCredentials | null {
+  const envUrl =
+    subreddit === "spectrum_official"
+      ? env.CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL
+      : env.CLOSED_TICKETS_WEBHOOK_SPECTRUM;
+  if (!envUrl?.trim()) {
+    return null;
+  }
+  return parseWebhookUrl(envUrl);
+}
+
+async function resolveClosedWebhookCredentials(
+  env: Env,
+  ticket: TicketRecord
+): Promise<ClosedWebhookCredentials | null> {
+  if (ticket.closedWebhookId?.trim() && ticket.closedWebhookToken?.trim()) {
+    return {
+      webhookId: ticket.closedWebhookId,
+      webhookToken: ticket.closedWebhookToken,
+    };
+  }
+
+  const config = await getClosedWebhookConfig(env);
+  const group = ticket.subreddit === "spectrum_official" ? "spectrum_official" : "spectrum";
+  const fromConfig = config?.[group];
+  if (fromConfig?.webhookId && fromConfig.webhookToken) {
+    return fromConfig;
+  }
+
+  return getClosedWebhookFromEnv(env, group);
+}
+
+type ArchiveTicketResult = {
+  ticket: TicketRecord;
+  error?: string;
+};
+
 async function archiveTicketToClosedChannel(
   env: Env,
   ticket: TicketRecord,
   botToken: string
-): Promise<TicketRecord> {
-  if (ticket.archived || !ticket.closedWebhookId || !ticket.closedWebhookToken) {
-    return ticket;
+): Promise<ArchiveTicketResult> {
+  if (ticket.archived) {
+    return { ticket };
+  }
+
+  const closedWebhook = await resolveClosedWebhookCredentials(env, ticket);
+  if (!closedWebhook) {
+    return {
+      ticket,
+      error:
+        "Closed tickets webhook is not configured. Add Discord Webhook 7 in Reddit app settings, save changes, then try again on a new alert.",
+    };
   }
 
   const closedChannelId = await getWebhookChannelId(
-    ticket.closedWebhookId,
-    ticket.closedWebhookToken
+    closedWebhook.webhookId,
+    closedWebhook.webhookToken
   );
   if (!closedChannelId) {
-    return ticket;
+    return {
+      ticket,
+      error: "Could not resolve the closed tickets channel from Webhook 7. Check the webhook URL.",
+    };
   }
 
   const activeChannelId = ticket.channelId;
@@ -997,17 +1096,30 @@ async function archiveTicketToClosedChannel(
   const archivedMessage = await sendDiscordBotMessage(
     botToken,
     closedChannelId,
-    buildTicketMessagePayload(ticket)
+    buildTicketMessagePayload({
+      ...ticket,
+      closedWebhookId: closedWebhook.webhookId,
+      closedWebhookToken: closedWebhook.webhookToken,
+    })
   );
   if (!archivedMessage) {
-    return ticket;
+    return {
+      ticket,
+      error:
+        "Could not post to the closed tickets channel. Confirm the bot can send messages and use buttons in that channel.",
+    };
   }
 
   if (ticket.threadId) {
     await archiveDiscordThread(botToken, ticket.threadId);
   }
 
-  await deleteDiscordMessage(botToken, activeChannelId, activeMessageId);
+  const deleted = await deleteDiscordMessage(botToken, activeChannelId, activeMessageId);
+  if (!deleted) {
+    console.error(
+      `Archived ticket ${ticket.id} to closed channel but failed to delete active message ${activeMessageId}.`
+    );
+  }
 
   const updated: TicketRecord = {
     ...ticket,
@@ -1016,14 +1128,16 @@ async function archiveTicketToClosedChannel(
     activeWebhookToken: ticket.webhookToken,
     activeChannelId,
     activeMessageId,
-    webhookId: ticket.closedWebhookId,
-    webhookToken: ticket.closedWebhookToken,
+    closedWebhookId: closedWebhook.webhookId,
+    closedWebhookToken: closedWebhook.webhookToken,
+    webhookId: closedWebhook.webhookId,
+    webhookToken: closedWebhook.webhookToken,
     channelId: archivedMessage.channel_id,
     messageId: archivedMessage.id,
   };
 
   await saveTicket(env, updated);
-  return updated;
+  return { ticket: updated };
 }
 
 async function restoreTicketToActiveChannel(
@@ -1091,13 +1205,33 @@ async function finalizeTicketInteraction(
     return interactionResponse(buildUpdateMessageResponse(restored, pingUserId));
   }
 
-  if (ARCHIVE_ACTIONS.has(action) && updated.closedWebhookId && botToken) {
+  if (ARCHIVE_ACTIONS.has(action)) {
+    if (!botToken) {
+      return interactionResponse(
+        ephemeral(
+          `${archiveActionLabel(action)}. Add DISCORD_BOT_TOKEN to the Cloudflare Worker to move tickets to the closed queue.`
+        )
+      );
+    }
+
     const archived = await archiveTicketToClosedChannel(env, updated, botToken);
-    if (archived.archived) {
+    if (archived.ticket.archived) {
       return interactionResponse(
         ephemeral(`${archiveActionLabel(action)}. Ticket moved to the closed queue.`)
       );
     }
+
+    if (archived.error) {
+      return interactionResponse(
+        ephemeral(`${archiveActionLabel(action)} in place. ${archived.error}`)
+      );
+    }
+
+    return interactionResponse(
+      ephemeral(
+        `${archiveActionLabel(action)} in place. Could not move the ticket to the closed queue.`
+      )
+    );
   }
 
   return interactionResponse(buildUpdateMessageResponse(updated, pingUserId));

@@ -1,6 +1,6 @@
 import { settings } from "@devvit/web/server";
 import type { TicketRecord } from "../../shared/types.js";
-import { getErrorMessage } from "./discord.js";
+import { getErrorMessage, parseWebhookUrl } from "./discord.js";
 
 export async function getWorkerConfig(): Promise<{
   url: string;
@@ -87,6 +87,58 @@ export async function registerTicketWithWorker(ticket: TicketRecord): Promise<bo
   }
 
   return false;
+}
+
+export async function syncClosedWebhooksToWorker(): Promise<boolean> {
+  const config = await getWorkerConfig();
+  if (!config) {
+    return false;
+  }
+
+  const spectrumWebhook = ((await settings.get("spectrumClosedTicketsWebhook")) as string | undefined)
+    ?.trim();
+  const spectrumOfficialWebhook = (
+    (await settings.get("spectrumOfficialClosedTicketsWebhook")) as string | undefined
+  )?.trim();
+
+  const toCredentials = (webhook?: string) => {
+    if (!webhook) {
+      return null;
+    }
+    const parsed = parseWebhookUrl(webhook);
+    if (!parsed) {
+      return null;
+    }
+    return {
+      webhookId: parsed.id,
+      webhookToken: parsed.token,
+    };
+  };
+
+  try {
+    const response = await fetch(`${config.url}/api/config/closed-webhooks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.secret}`,
+      },
+      body: JSON.stringify({
+        spectrum: toCredentials(spectrumWebhook),
+        spectrum_official: toCredentials(spectrumOfficialWebhook),
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.error(`Worker closed webhook sync failed: ${response.status} ${body}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Worker closed webhook sync error:", getErrorMessage(error));
+    return false;
+  }
 }
 
 export type WorkerReportSnapshot = {
