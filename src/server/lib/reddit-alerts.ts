@@ -38,6 +38,7 @@ import {
   createTicketId,
   getErrorMessage,
   isDiscordWebhook,
+  messageHasInteractiveButtons,
   parseWebhookUrl,
   previewText,
   redditPermalinkUrl,
@@ -185,9 +186,17 @@ async function sendTicketAlert(options: {
   };
 
   let message = await sendDiscordWebhook(options.webhook, payload, true);
+  let buttonsAttached = message ? messageHasInteractiveButtons(message) : false;
+
+  if (message && payload.components && !buttonsAttached) {
+    console.error(
+      "Discord accepted the alert but removed interactive buttons. Buttons require a webhook created by your Discord application (not a channel-only webhook)."
+    );
+  }
+
   if (!message) {
     console.warn(
-      "Ticket alert with buttons failed; retrying with embed-only payload (channel webhooks may not support buttons)."
+      "Ticket alert with buttons failed; retrying with embed-only payload."
     );
     message = await sendDiscordWebhook(
       options.webhook,
@@ -197,6 +206,7 @@ async function sendTicketAlert(options: {
       },
       true
     );
+    buttonsAttached = false;
     if (!message) {
       console.error("Failed to send Discord alert after embed-only fallback.");
       return;
@@ -206,7 +216,20 @@ async function sendTicketAlert(options: {
   draftTicket.messageId = message.id;
   draftTicket.channelId = message.channel_id;
   await saveTicket(draftTicket);
-  await registerTicketWithWorker(draftTicket);
+
+  if (!buttonsAttached) {
+    console.warn(
+      "Skipping Cloudflare ticket sync because the Discord message has no interactive buttons."
+    );
+    return;
+  }
+
+  const registered = await registerTicketWithWorker(draftTicket);
+  if (!registered) {
+    console.error(
+      "Discord message was sent with buttons, but Cloudflare ticket sync failed. Button clicks may show 'Ticket not found'."
+    );
+  }
 }
 
 export async function sendModMailToWebhook(event: ModMail): Promise<void> {

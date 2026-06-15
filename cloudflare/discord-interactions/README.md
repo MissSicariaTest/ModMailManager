@@ -44,9 +44,23 @@ Also click **Clear build cache** under Build settings, then create a **new** dep
 
 ### Discord Developer Portal
 
-1. **General Information → Interactions Endpoint URL:** paste your worker URL  
-   Example: `https://spectrum-modmail-discord.your-subdomain.workers.dev`
-2. Save. Discord sends a ping; the worker responds automatically.
+1. Create a **Discord Application** (or use your existing mod bot app).
+2. **General Information → Interactions Endpoint URL:** paste your worker URL  
+   Example: `https://modmail.your-subdomain.workers.dev`
+3. Copy **Public Key** into Cloudflare `DISCORD_PUBLIC_KEY` and Reddit app settings.
+4. Save. Discord sends a ping; the worker responds automatically.
+
+### Application-owned webhooks (required for buttons)
+
+Channel webhooks created in Discord channel settings send alerts but **strip interactive buttons**.
+
+For Claim / Close / Reassign buttons:
+
+1. Use the same Discord application as your Interactions Endpoint.
+2. Create webhooks through that application (bot-owned webhooks), not channel Integrations → Webhooks.
+3. Paste those URLs into Discord Webhook 1–6 in Reddit app settings.
+
+If buttons are missing on alerts, the notification still works but ticket actions will not.
 
 ### Reddit Devvit app settings (subreddit install page)
 

@@ -19,10 +19,13 @@ export async function getWorkerConfig(): Promise<{
   return { url, secret };
 }
 
-export async function registerTicketWithWorker(ticket: TicketRecord): Promise<void> {
+export async function registerTicketWithWorker(ticket: TicketRecord): Promise<boolean> {
   const config = await getWorkerConfig();
   if (!config) {
-    return;
+    console.error(
+      "Discord buttons will not work until Cloudflare Worker URL and shared secret are saved in app settings."
+    );
+    return false;
   }
 
   try {
@@ -38,9 +41,13 @@ export async function registerTicketWithWorker(ticket: TicketRecord): Promise<vo
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       console.error(`Worker ticket register failed: ${response.status} ${body}`);
+      return false;
     }
+
+    return true;
   } catch (error) {
     console.error("Worker ticket register error:", getErrorMessage(error));
+    return false;
   }
 }
 

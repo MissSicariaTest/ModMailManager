@@ -24,7 +24,7 @@
       "spectrumModmailWebhook": {
         "type": "string",
         "label": "Discord Webhook 1 — Modmail",
-        "helpText": "Modmail alerts for your primary community. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank."
+        "helpText": "Modmail alerts for your primary community. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank. For Claim/Close buttons, use a webhook created by your Discord application."
       },
       "spectrumOfficialModmailWebhook": {
         "type": "string",
@@ -58,17 +58,17 @@
       "discordApplicationPublicKey": {
         "type": "string",
         "label": "Discord Application Public Key",
-        "helpText": "From Discord Developer Portal → General Information → Public Key. Also set this as DISCORD_PUBLIC_KEY on your Cloudflare Worker."
+        "helpText": "From Discord Developer Portal → General Information → Public Key. Must match the DISCORD_PUBLIC_KEY secret on your Cloudflare Worker."
       },
       "discordInteractionsWorkerUrl": {
         "type": "string",
-        "label": "Cloudflare Worker URL (Discord interactions proxy)",
-        "helpText": "Your deployed Cloudflare Worker URL, e.g. https://spectrum-modmail-discord.your-name.workers.dev — paste this into Discord's Interactions Endpoint URL field."
+        "label": "Cloudflare Worker URL (Discord interactions)",
+        "helpText": "Your deployed worker URL, e.g. https://modmail.your-name.workers.dev — also set this as the Interactions Endpoint URL in the Discord Developer Portal."
       },
       "discordInteractionsWorkerSecret": {
         "type": "string",
         "label": "Cloudflare Worker shared secret",
-        "helpText": "Same random string set as WORKER_SECRET in Cloudflare Worker settings. Used so Reddit can register tickets with the worker."
+        "helpText": "Same random string set as WORKER_SECRET in Cloudflare. Required so button clicks can find the matching ticket."
       },
       "outgoing": {
         "type": "boolean",

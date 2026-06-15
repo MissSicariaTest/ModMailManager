@@ -48,6 +48,7 @@ export type DiscordWebhookPayload = {
 export type DiscordWebhookMessage = {
   id: string;
   channel_id: string;
+  components?: DiscordActionRow[];
 };
 
 export type TicketActionLog = {

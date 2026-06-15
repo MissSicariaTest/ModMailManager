@@ -212,6 +212,7 @@ async function handleButton(interaction: DiscordInteraction, env: Env): Promise<
 
   const updated = await applyTicketAction(env, ticket, parsed.action, actor);
   await trackAction(env, updated.subreddit, parsed.action, actor.username);
+  await editWebhookMessage(updated);
   return Response.json(buildUpdateMessageResponse(updated));
 }
 
@@ -246,6 +247,7 @@ async function handleModal(interaction: DiscordInteraction, env: Env): Promise<R
 
   const updated = await applyTicketAction(env, ticket, "reassign", actor, assigneeName);
   await trackAction(env, updated.subreddit, "reassign", actor.username);
+  await editWebhookMessage(updated);
   return Response.json(buildUpdateMessageResponse(updated));
 }
 
@@ -547,6 +549,28 @@ function buildUpdateMessageResponse(ticket: TicketRecord): unknown {
       components: buildTicketButtons(ticket.id, ticket.status),
     },
   };
+}
+
+async function editWebhookMessage(ticket: TicketRecord): Promise<boolean> {
+  const url = `https://discord.com/api/webhooks/${ticket.webhookId}/${ticket.webhookToken}/messages/${ticket.messageId}?with_components=true`;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      embeds: [buildTicketEmbed(ticket)],
+      components: buildTicketButtons(ticket.id, ticket.status),
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.error(`Webhook message edit failed: ${response.status} ${body}`);
+    return false;
+  }
+
+  return true;
 }
 
 function buildReassignModal(ticketId: string): unknown {

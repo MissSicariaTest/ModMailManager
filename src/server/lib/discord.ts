@@ -193,12 +193,36 @@ export function buildTicketPayload(ticket: TicketRecord): DiscordWebhookPayload 
   };
 }
 
+export function buildWebhookRequestUrl(
+  webhook: string,
+  options?: { wait?: boolean; withComponents?: boolean }
+): string {
+  const params = new URLSearchParams();
+  if (options?.wait) {
+    params.set("wait", "true");
+  }
+  if (options?.withComponents) {
+    params.set("with_components", "true");
+  }
+
+  const query = params.toString();
+  const base = webhook.split("?")[0];
+  return query ? `${base}?${query}` : base;
+}
+
+export function messageHasInteractiveButtons(message: DiscordWebhookMessage): boolean {
+  return (message.components ?? []).some((row) =>
+    row.components?.some((button) => Boolean(button.custom_id))
+  );
+}
+
 export async function sendDiscordWebhook(
   webhook: string,
   payload: DiscordWebhookPayload,
   wait = false
 ): Promise<DiscordWebhookMessage | null> {
-  const url = wait ? `${webhook}${webhook.includes("?") ? "&" : "?"}wait=true` : webhook;
+  const withComponents = Boolean(payload.components?.length);
+  const url = buildWebhookRequestUrl(webhook, { wait, withComponents });
   const response = await fetch(url, {
     method: "POST",
     headers: {
