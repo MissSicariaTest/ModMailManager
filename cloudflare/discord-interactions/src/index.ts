@@ -122,7 +122,8 @@ export default {
 
 function authorizeWorker(request: Request, env: Env): boolean {
   const auth = request.headers.get("Authorization") ?? "";
-  return auth === `Bearer ${env.WORKER_SECRET}`;
+  const secret = env.WORKER_SECRET?.trim() ?? "";
+  return auth === `Bearer ${secret}`;
 }
 
 function isSecretConfigured(value: string | undefined): boolean {
@@ -254,10 +255,12 @@ async function handleButton(
     return interactionResponse(ephemeral("Unable to identify Discord user."));
   }
 
-  const ticket = await getTicket(env, parsed.ticketId);
+  const ticket = await getTicketWithRetry(env, parsed.ticketId);
   if (!ticket) {
     return interactionResponse(
-      ephemeral("Ticket not found. It may not have synced from Reddit yet.")
+      ephemeral(
+        "Ticket not found. Save Cloudflare Worker URL and shared secret in Reddit app settings (must match Cloudflare WORKER_SECRET), then trigger a new alert and click Claim on that message."
+      )
     );
   }
 
@@ -343,6 +346,17 @@ async function saveTicket(env: Env, ticket: TicketRecord): Promise<void> {
 async function getTicket(env: Env, ticketId: string): Promise<TicketRecord | null> {
   const raw = await env.TICKETS.get(`ticket:${ticketId}`);
   return raw ? (JSON.parse(raw) as TicketRecord) : null;
+}
+
+async function getTicketWithRetry(env: Env, ticketId: string): Promise<TicketRecord | null> {
+  let ticket = await getTicket(env, ticketId);
+  if (ticket) {
+    return ticket;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  ticket = await getTicket(env, ticketId);
+  return ticket;
 }
 
 async function applyTicketAction(
