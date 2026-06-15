@@ -4,10 +4,12 @@ import type {
   AutomoderatorFilterPost,
   CommentReport,
   CommentSubmit,
+  CommentCreate,
   ModAction,
   ModMail,
   PostReport,
   PostSubmit,
+  PostUpdate,
 } from "@devvit/protos";
 import type { TriggerResponse } from "@devvit/web/shared";
 import { safeTrack } from "../lib/reporting.js";
@@ -19,6 +21,7 @@ import {
   sendModQueueAlertFromCommentReport,
   sendModQueueAlertFromPostReport,
   sendNewPostAlert,
+  sendPostUpdateFollowUpToTicket,
   trackCommentSubmitForReport,
   trackModActionForReport,
   trackModMailForReport,
@@ -112,6 +115,28 @@ triggers.post("/on-comment-submit", async (c) => {
     return c.json(success("Comment tracking processed."), 200);
   } catch (err) {
     console.error("CommentSubmit trigger error:", getErrorMessage(err));
+    return c.json(error(getErrorMessage(err)), 500);
+  }
+});
+
+triggers.post("/on-comment-create", async (c) => {
+  try {
+    const event = await c.req.json<CommentCreate>();
+    await sendCommentFollowUpToTicket(event);
+    return c.json(success("Comment follow-up processed."), 200);
+  } catch (err) {
+    console.error("CommentCreate trigger error:", getErrorMessage(err));
+    return c.json(error(getErrorMessage(err)), 500);
+  }
+});
+
+triggers.post("/on-post-update", async (c) => {
+  try {
+    const event = await c.req.json<PostUpdate>();
+    await sendPostUpdateFollowUpToTicket(event);
+    return c.json(success("Post update follow-up processed."), 200);
+  } catch (err) {
+    console.error("PostUpdate trigger error:", getErrorMessage(err));
     return c.json(error(getErrorMessage(err)), 500);
   }
 });

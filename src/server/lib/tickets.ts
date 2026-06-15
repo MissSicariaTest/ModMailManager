@@ -1,6 +1,8 @@
 import { redis } from "@devvit/web/server";
 import {
+  COMMENT_FOLLOWUP_DEDUPE_PREFIX,
   OPEN_TICKETS_REDIS_KEY,
+  PENDING_POST_ALERT_PREFIX,
   REDDIT_TICKET_MAP_PREFIX,
   TERMINAL_TICKET_STATUSES,
   TICKET_REDIS_PREFIX,
@@ -54,6 +56,29 @@ export async function getTicketIdForRedditKey(
 ): Promise<string | null> {
   const ticketId = await redis.get(redditTicketMapKey(type, redditKey));
   return ticketId ?? null;
+}
+
+export async function markPostAlertPending(postId: string): Promise<void> {
+  await redis.set(`${PENDING_POST_ALERT_PREFIX}${postId}`, String(Date.now()));
+}
+
+export async function clearPostAlertPending(postId: string): Promise<void> {
+  await redis.del(`${PENDING_POST_ALERT_PREFIX}${postId}`);
+}
+
+export async function isPostAlertPending(postId: string): Promise<boolean> {
+  const value = await redis.get(`${PENDING_POST_ALERT_PREFIX}${postId}`);
+  return value !== null && value !== undefined;
+}
+
+export async function markCommentFollowUpHandled(commentId: string): Promise<boolean> {
+  const key = `${COMMENT_FOLLOWUP_DEDUPE_PREFIX}${commentId}`;
+  const existing = await redis.get(key);
+  if (existing) {
+    return false;
+  }
+  await redis.set(key, "1");
+  return true;
 }
 
 export async function saveTicket(ticket: TicketRecord): Promise<void> {

@@ -25,6 +25,8 @@ export const DAILY_REPORT_SENT_REDIS_KEY = "dailyReport:lastSentDate";
 export const TICKET_REDIS_PREFIX = "ticket:";
 export const OPEN_TICKETS_REDIS_KEY = "tickets:open";
 export const REDDIT_TICKET_MAP_PREFIX = "ticket:reddit:";
+export const PENDING_POST_ALERT_PREFIX = "ticket:pending:post:";
+export const COMMENT_FOLLOWUP_DEDUPE_PREFIX = "ticket:dedupe:comment:";
 
 export const TERMINAL_TICKET_STATUSES = new Set(["closed", "resolved", "unresolved"]);
 

@@ -125,7 +125,9 @@
     "onAutomoderatorFilterPost": "/internal/triggers/on-mod-queue",
     "onAutomoderatorFilterComment": "/internal/triggers/on-mod-queue",
     "onPostSubmit": "/internal/triggers/on-post-submit",
+    "onPostUpdate": "/internal/triggers/on-post-update",
     "onCommentSubmit": "/internal/triggers/on-comment-submit",
+    "onCommentCreate": "/internal/triggers/on-comment-create",
     "onModAction": "/internal/triggers/on-mod-action"
   },
   "scripts": {

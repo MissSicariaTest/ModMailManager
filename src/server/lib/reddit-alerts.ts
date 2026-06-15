@@ -4,10 +4,12 @@ import type {
   AutomoderatorFilterPost,
   CommentReport,
   CommentSubmit,
+  CommentCreate,
   ModAction,
   ModMail,
   PostReport,
   PostSubmit,
+  PostUpdate,
 } from "@devvit/protos";
 import {
   AUTOMOD_YELLOW,
@@ -64,7 +66,11 @@ import {
   getTicket,
   getTicketIdForRedditKey,
   isActiveTicket,
+  isPostAlertPending,
   linkRedditKeyToTicket,
+  markCommentFollowUpHandled,
+  markPostAlertPending,
+  clearPostAlertPending,
   saveTicket,
   unlinkRedditKey,
 } from "./tickets.js";
@@ -204,6 +210,34 @@ async function resolveActiveTicketForFollowUp(
   }
 
   return ticket;
+}
+
+async function waitForActivePostTicket(postId: string): Promise<TicketRecord | null> {
+  let ticket = await resolveActiveTicketForFollowUp("post", postId);
+  if (ticket) {
+    return ticket;
+  }
+
+  if (!(await isPostAlertPending(postId))) {
+    return null;
+  }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await sleep(2000);
+    ticket = await resolveActiveTicketForFollowUp("post", postId);
+    if (ticket) {
+      return ticket;
+    }
+    if (!(await isPostAlertPending(postId))) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function resolvePostTicketForFollowUp(postId: string): Promise<TicketRecord | null> {
+  return (await waitForActivePostTicket(postId)) ?? (await resolveActiveTicketForFollowUp("post", postId));
 }
 
 async function buildFollowUpPing(
@@ -790,91 +824,109 @@ export async function sendNewPostAlert(event: PostSubmit): Promise<void> {
     return;
   }
 
-  await sleep(10_000);
-
-  const livePost = await reddit.getPostById(toPostId(post.id));
-  if (livePost.removed) {
-    console.log(
-      `Post ${post.id} was removed or filtered before the new-post alert could be sent. Skipping Discord notification.`
-    );
-    return;
-  }
-
-  const webhook = await getWebhookUrl(subredditName, "newposts");
-  if (!webhook) {
-    return;
-  }
-
-  const username = author?.name ?? livePost.authorName ?? "Unknown";
-  const postUrl = redditPermalinkUrl(post.permalink);
-  const flairText = post.linkFlair?.text?.trim();
-  const bodyPreview = post.isSelf ? previewText(post.selftext ?? "") : "";
-  const displaySubreddit = normalizeSubredditName(subredditName);
-
-  const fields: DiscordEmbedField[] = [
-    {
-      name: "Subreddit",
-      value: truncateField(`r/${displaySubreddit}`),
-      inline: true,
-    },
-  ];
-
-  if (flairText) {
-    fields.push({
-      name: "Post Flair",
-      value: truncateField(flairText),
-      inline: true,
-    });
-  }
-
-  if (bodyPreview) {
-    fields.push({
-      name: "Post Preview",
-      value: truncateField(bodyPreview),
-    });
-  }
-
-  const color = flairText ? SPECTRUM_BLUE : POST_WHITE;
   const postId = toPostId(post.id);
-  await sendTicketAlert({
-    webhook,
-    source: "newposts",
-    subredditName,
-    embed: {
-      title: truncateTitle(post.title),
-      url: postUrl,
-      author: {
-        name: username,
-        url: redditProfileUrl(username),
+  await markPostAlertPending(postId);
+
+  try {
+    await sleep(10_000);
+
+    const livePost = await reddit.getPostById(postId);
+    if (livePost.removed) {
+      console.log(
+        `Post ${post.id} was removed or filtered before the new-post alert could be sent. Skipping Discord notification.`
+      );
+      return;
+    }
+
+    const webhook = await getWebhookUrl(subredditName, "newposts");
+    if (!webhook) {
+      return;
+    }
+
+    const username = author?.name ?? livePost.authorName ?? "Unknown";
+    const postUrl = redditPermalinkUrl(post.permalink);
+    const flairText = post.linkFlair?.text?.trim();
+    const bodyPreview = post.isSelf ? previewText(post.selftext ?? "") : "";
+    const displaySubreddit = normalizeSubredditName(subredditName);
+
+    const fields: DiscordEmbedField[] = [
+      {
+        name: "Subreddit",
+        value: truncateField(`r/${displaySubreddit}`),
+        inline: true,
       },
-      fields,
-      color,
-      timestamp: new Date().toISOString(),
-    },
-    baseColor: color,
-    redditKey: postId,
-    redditKeyType: "post",
-    threadName: post.title,
-  });
+    ];
+
+    if (flairText) {
+      fields.push({
+        name: "Post Flair",
+        value: truncateField(flairText),
+        inline: true,
+      });
+    }
+
+    if (bodyPreview) {
+      fields.push({
+        name: "Post Preview",
+        value: truncateField(bodyPreview),
+      });
+    }
+
+    const color = flairText ? SPECTRUM_BLUE : POST_WHITE;
+    await sendTicketAlert({
+      webhook,
+      source: "newposts",
+      subredditName,
+      embed: {
+        title: truncateTitle(post.title),
+        url: postUrl,
+        author: {
+          name: username,
+          url: redditProfileUrl(username),
+        },
+        fields,
+        color,
+        timestamp: new Date().toISOString(),
+      },
+      baseColor: color,
+      redditKey: postId,
+      redditKeyType: "post",
+      threadName: post.title,
+    });
+  } finally {
+    await clearPostAlertPending(postId);
+  }
 }
 
-export async function sendCommentFollowUpToTicket(event: CommentSubmit): Promise<void> {
+export async function sendCommentFollowUpToTicket(
+  event: CommentSubmit | CommentCreate
+): Promise<void> {
   const subredditName = event.subreddit?.name ?? "";
   if (!subredditName || !isMonitoredSubreddit(subredditName)) {
     return;
   }
 
+  const commentId = event.comment?.id;
+  if (commentId && !(await markCommentFollowUpHandled(commentId))) {
+    console.log(`Skipping duplicate comment follow-up for ${commentId}.`);
+    return;
+  }
+
   const postId = toPostId(event.comment?.postId ?? event.post?.id ?? "");
   const authorName = event.author?.name ?? event.comment?.author ?? "Unknown";
-  const body = event.comment?.body ?? "";
-  if (!postId || !body.trim()) {
+  const body = event.comment?.body?.trim() ?? "";
+  const hasMedia =
+    Boolean(event.comment?.hasMedia) || (event.comment?.mediaUrls?.length ?? 0) > 0;
+  const preview = body || (hasMedia ? "[Media comment]" : "");
+
+  if (!postId || !preview) {
     console.log(
-      `Skipping comment follow-up for post "${postId || "unknown"}": missing post id or comment body.`
+      `Skipping comment follow-up for post "${postId || "unknown"}": missing post id or comment content.`
     );
     return;
   }
 
-  const activeTicket = await resolveActiveTicketForFollowUp("post", postId);
+  const activeTicket = await resolvePostTicketForFollowUp(postId);
   if (!activeTicket) {
     console.log(
       `No active Discord ticket for post ${postId}. Only posts that received a new alert after the upgrade can receive comment follow-ups in-thread.`
@@ -893,7 +945,7 @@ export async function sendCommentFollowUpToTicket(event: CommentSubmit): Promise
   const handled = await postTicketFollowUp(activeTicket, {
     title: "New comment",
     previewFieldName: "Post Preview",
-    preview: body,
+    preview,
     authorName,
     url: postUrl,
     color: POST_WHITE,
@@ -905,6 +957,44 @@ export async function sendCommentFollowUpToTicket(event: CommentSubmit): Promise
       `Failed to post comment follow-up for ${postId}. Confirm the Discord Bot Token is set and the bot can send messages in the alert channel.`
     );
   }
+}
+
+export async function sendPostUpdateFollowUpToTicket(event: PostUpdate): Promise<void> {
+  const subredditName = event.subreddit?.name ?? "";
+  const post = event.post;
+  if (!subredditName || !post || !isMonitoredSubreddit(subredditName)) {
+    return;
+  }
+
+  if (!post.isSelf) {
+    return;
+  }
+
+  const postId = toPostId(post.id);
+  const nextBody = post.selftext?.trim() ?? "";
+  const previousBody = event.previousBody?.trim() ?? "";
+  if (!nextBody || nextBody === previousBody) {
+    return;
+  }
+
+  const activeTicket = await resolvePostTicketForFollowUp(postId);
+  if (!activeTicket) {
+    console.log(`No active Discord ticket for updated post ${postId}.`);
+    return;
+  }
+
+  const authorName = event.author?.name ?? "Unknown";
+  const postUrl = redditPermalinkUrl(post.permalink);
+
+  await postTicketFollowUp(activeTicket, {
+    title: "Post updated",
+    previewFieldName: "Post Preview",
+    preview: nextBody,
+    authorName,
+    url: postUrl,
+    color: POST_WHITE,
+    pingAssignee: true,
+  });
 }
 
 export async function trackModMailForReport(event: ModMail): Promise<void> {
