@@ -77,7 +77,23 @@ async function getWebhookUrl(
     return null;
   }
 
-  const webhook = (await settings.get(settingName)) as string | undefined;
+  let webhook = (await settings.get(settingName)) as string | undefined;
+  let resolvedSettingName = settingName;
+
+  if (!webhook && category !== "modmail") {
+    const modmailSettingName = getWebhookSettingName(subredditName, "modmail");
+    if (modmailSettingName) {
+      const modmailWebhook = (await settings.get(modmailSettingName)) as string | undefined;
+      if (modmailWebhook) {
+        webhook = modmailWebhook;
+        resolvedSettingName = modmailSettingName;
+        console.log(
+          `No webhook configured for "${settingName}"; using "${modmailSettingName}" as fallback for ${category}.`
+        );
+      }
+    }
+  }
+
   if (!webhook) {
     console.error(
       `No webhook URL configured for setting "${settingName}". Open the app settings page for this subreddit and fill in the matching Discord Webhook field, then click Save Changes.`
@@ -86,7 +102,7 @@ async function getWebhookUrl(
   }
 
   if (!isDiscordWebhook(webhook)) {
-    console.error(`Setting "${settingName}" is not a valid Discord webhook URL`);
+    console.error(`Setting "${resolvedSettingName}" is not a valid Discord webhook URL`);
     return null;
   }
 
@@ -491,7 +507,9 @@ export async function sendNewPostAlert(event: PostSubmit): Promise<void> {
 
   const livePost = await reddit.getPostById(toPostId(post.id));
   if (livePost.removed) {
-    console.log(`Post ${post.id} was removed before alert could be sent. Skipping.`);
+    console.log(
+      `Post ${post.id} was removed or filtered before the new-post alert could be sent. Skipping Discord notification.`
+    );
     return;
   }
 
