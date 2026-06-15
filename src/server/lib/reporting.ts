@@ -22,6 +22,7 @@ import {
   truncateTitle,
 } from "./discord.js";
 import { countOpenUnclaimedTickets } from "./tickets.js";
+import { fetchWorkerReportSnapshot, type WorkerReportSnapshot } from "./worker-client.js";
 
 const SPECTRUM_BLUE = 0x005fff;
 
@@ -203,6 +204,22 @@ function formatReportingPeriod(store: DailyReportStore, generatedAt: Date): stri
   return `${store.periodStartedAt} to ${generatedAt.toISOString()}`;
 }
 
+function formatWorkerHandlerSummary(
+  handlers: Record<string, Record<string, number>>
+): string {
+  const entries = Object.entries(handlers);
+  if (entries.length === 0) {
+    return "No Discord ticket actions recorded.";
+  }
+
+  return entries
+    .map(([username, stats]) => {
+      const parts = Object.entries(stats).map(([action, count]) => `${count} ${action}`);
+      return `${username}: ${parts.join(", ") || "no actions"}`;
+    })
+    .join("\n");
+}
+
 function formatHandlerSummary(handlers: TicketHandlerStats): string {
   const entries = Object.entries(handlers);
   if (entries.length === 0) {
@@ -281,11 +298,23 @@ export function reconcilePostMetrics(store: DailyReportStore): void {
 async function buildSubredditReportFields(
   subreddit: MonitoredSubreddit,
   metrics: SubredditMetrics,
-  store: DailyReportStore
+  store: DailyReportStore,
+  workerSnapshot: WorkerReportSnapshot | null
 ): Promise<DiscordEmbedField[]> {
   const label = displaySubredditLabel(subreddit);
-  const openUnclaimed = await countOpenUnclaimedTickets(subreddit);
-  const handlerSummary = formatHandlerSummary(getHandlerStats(store, subreddit));
+  const workerMetrics = workerSnapshot?.subreddits[subreddit];
+  const openUnclaimed =
+    workerMetrics?.openUnclaimed ?? (await countOpenUnclaimedTickets(subreddit));
+  const handlerSummary = workerMetrics
+    ? formatWorkerHandlerSummary(workerMetrics.handlers)
+    : formatHandlerSummary(getHandlerStats(store, subreddit));
+
+  const ticketClaimed = workerMetrics?.ticketsClaimed ?? metrics.ticketsClaimed;
+  const ticketClosed = workerMetrics?.ticketsClosed ?? metrics.ticketsClosed;
+  const ticketResolved = workerMetrics?.ticketsResolved ?? metrics.ticketsResolved;
+  const ticketUnresolved = workerMetrics?.ticketsUnresolved ?? metrics.ticketsUnresolved;
+  const ticketReassigned = workerMetrics?.ticketsReassigned ?? metrics.ticketsReassigned;
+  const ticketReopened = workerMetrics?.ticketsReopened ?? metrics.ticketsReopened;
 
   return [
     {
@@ -367,32 +396,32 @@ async function buildSubredditReportFields(
     },
     {
       name: `${label} — Tickets Claimed`,
-      value: truncateField(String(metrics.ticketsClaimed)),
+      value: truncateField(String(ticketClaimed)),
       inline: true,
     },
     {
       name: `${label} — Tickets Closed`,
-      value: truncateField(String(metrics.ticketsClosed)),
+      value: truncateField(String(ticketClosed)),
       inline: true,
     },
     {
       name: `${label} — Tickets Resolved`,
-      value: truncateField(String(metrics.ticketsResolved)),
+      value: truncateField(String(ticketResolved)),
       inline: true,
     },
     {
       name: `${label} — Tickets Unresolved`,
-      value: truncateField(String(metrics.ticketsUnresolved)),
+      value: truncateField(String(ticketUnresolved)),
       inline: true,
     },
     {
       name: `${label} — Tickets Reassigned`,
-      value: truncateField(String(metrics.ticketsReassigned)),
+      value: truncateField(String(ticketReassigned)),
       inline: true,
     },
     {
       name: `${label} — Tickets Reopened`,
-      value: truncateField(String(metrics.ticketsReopened)),
+      value: truncateField(String(ticketReopened)),
       inline: true,
     },
     {
@@ -465,6 +494,7 @@ export async function sendDailyReport(): Promise<void> {
   const store = await getDailyReportStore();
   finalizeModmailConversationMetrics(store);
   reconcilePostMetrics(store);
+  const workerSnapshot = await fetchWorkerReportSnapshot();
 
   const generatedAt = new Date();
   const footerText = truncateField(`Report generated ${formatReportGeneratedAt(generatedAt)}`);
@@ -479,7 +509,12 @@ export async function sendDailyReport(): Promise<void> {
         title: truncateTitle("Daily Moderation Report"),
         fields: [
           periodField,
-          ...(await buildSubredditReportFields("spectrum", getMetrics(store, "spectrum"), store)),
+          ...(await buildSubredditReportFields(
+            "spectrum",
+            getMetrics(store, "spectrum"),
+            store,
+            workerSnapshot
+          )),
         ],
         color: SPECTRUM_BLUE,
         footer: { text: footerText },
@@ -489,7 +524,8 @@ export async function sendDailyReport(): Promise<void> {
         fields: await buildSubredditReportFields(
           "spectrum_official",
           getMetrics(store, "spectrum_official"),
-          store
+          store,
+          workerSnapshot
         ),
         color: SPECTRUM_BLUE,
         footer: { text: footerText },

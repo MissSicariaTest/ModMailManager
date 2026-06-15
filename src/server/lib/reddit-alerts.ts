@@ -53,6 +53,7 @@ import {
   saveDailyReportStore,
 } from "./reporting.js";
 import { saveTicket } from "./tickets.js";
+import { registerTicketWithWorker } from "./worker-client.js";
 
 function toPostId(id: string): `t3_${string}` {
   return (id.startsWith("t3_") ? id : `t3_${id}`) as `t3_${string}`;
@@ -173,6 +174,7 @@ async function sendTicketAlert(options: {
   draftTicket.messageId = message.id;
   draftTicket.channelId = message.channel_id;
   await saveTicket(draftTicket);
+  await registerTicketWithWorker(draftTicket);
 }
 
 export async function sendModMailToWebhook(event: ModMail): Promise<void> {

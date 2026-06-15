@@ -8,7 +8,7 @@
   "permissions": {
     "http": {
       "enable": true,
-      "domains": ["discord.com"]
+      "domains": ["discord.com", "workers.dev"]
     },
     "redis": true,
     "reddit": {
@@ -49,7 +49,17 @@
       "discordApplicationPublicKey": {
         "type": "string",
         "label": "Discord Application Public Key",
-        "helpText": "Required for interactive buttons. Find this in the Discord Developer Portal under your app's General Information. Set the Interactions Endpoint URL to https://modmailtodiscord.reddit.com/api/discord/interactions (replace with your app slug if different). Webhooks must be created under the same Discord application."
+        "helpText": "From Discord Developer Portal → General Information → Public Key. Also set this as DISCORD_PUBLIC_KEY on your Cloudflare Worker."
+      },
+      "discordInteractionsWorkerUrl": {
+        "type": "string",
+        "label": "Cloudflare Worker URL (Discord interactions proxy)",
+        "helpText": "Your deployed Cloudflare Worker URL, e.g. https://spectrum-modmail-discord.your-name.workers.dev — paste this into Discord's Interactions Endpoint URL field."
+      },
+      "discordInteractionsWorkerSecret": {
+        "type": "string",
+        "label": "Cloudflare Worker shared secret",
+        "helpText": "Same random string set as WORKER_SECRET in Cloudflare Worker settings. Used so Reddit can register tickets with the worker."
       },
       "outgoing": {
         "type": "boolean",
