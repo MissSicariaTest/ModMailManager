@@ -9,7 +9,24 @@ Use **your fork**, not the upstream repo you originally forked from:
 - Repository: **`MissSicariaTest/Spectrum-Modmail-Bot`**
 - Branch: **`cursor/discord-interactive-buttons-bf46`** (or `main` after merge)
 
-### Steps in Cloudflare
+### If build fails with `npm ci` / missing `package-lock.json`
+
+Cloudflare runs automatic `npm ci` before your build command. Add a **build variable**:
+
+| Variable | Value |
+|----------|--------|
+| `SKIP_DEPENDENCY_INSTALL` | `true` |
+
+Then set **Build command** to:
+
+```bash
+npm install && npx wrangler deploy
+```
+
+Leave **Deploy command** empty, or set it to `true` / remove duplicate deploy if Cloudflare requires a value — use only one deploy step.
+
+Also click **Clear build cache** under Build settings, then create a **new** deployment (not retry an old one).
+
 
 1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create**
 2. Choose **Connect to Git** (you already signed in with GitHub)
