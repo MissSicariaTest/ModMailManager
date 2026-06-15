@@ -149,7 +149,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/api/health") {
-      return getHealthStatus(env);
+      return getHealthStatusWithSync(env);
     }
 
     if (request.method === "GET" && url.pathname === "/") {
@@ -170,8 +170,8 @@ function isSecretConfigured(value: string | undefined): boolean {
   return Boolean(value?.trim());
 }
 
-function getHealthStatus(env: Env): Response {
-  return Response.json({
+function getHealthStatus(env: Env): Record<string, unknown> {
+  return {
     ok: isSecretConfigured(env.DISCORD_PUBLIC_KEY) && isSecretConfigured(env.WORKER_SECRET),
     secrets: {
       DISCORD_PUBLIC_KEY: isSecretConfigured(env.DISCORD_PUBLIC_KEY),
@@ -182,7 +182,8 @@ function getHealthStatus(env: Env): Response {
         env.CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL
       ),
     },
-  });
+    note: "CLOSED_TICKETS_WEBHOOK_* false only means the optional Cloudflare secret is unset. Use closedWebhooksFromReddit to see whether Webhook 7 was synced from Reddit.",
+  };
 }
 
 async function syncClosedWebhooksConfig(request: Request, env: Env): Promise<Response> {
@@ -1025,6 +1026,17 @@ async function getClosedWebhookConfig(env: Env): Promise<ClosedWebhookConfig | n
   return raw ? (JSON.parse(raw) as ClosedWebhookConfig) : null;
 }
 
+async function getHealthStatusWithSync(env: Env): Promise<Response> {
+  const kvConfig = await getClosedWebhookConfig(env);
+  return Response.json({
+    ...getHealthStatus(env),
+    closedWebhooksFromReddit: {
+      spectrum: Boolean(kvConfig?.spectrum?.webhookId),
+      spectrum_official: Boolean(kvConfig?.spectrum_official?.webhookId),
+    },
+  });
+}
+
 function getClosedWebhookFromEnv(
   env: Env,
   subreddit: string
@@ -1275,7 +1287,7 @@ async function finalizeTicketInteraction(
         if (!closedWebhook) {
           await sendInteractionFollowup(
             interaction,
-            `${archiveActionLabel(action)} in place. Add Discord Webhook 7 in Reddit app settings, save changes, then try again on a new alert.`
+            `${archiveActionLabel(action)} in place. Webhook 7 is saved in Reddit but has not reached the Worker yet. In Reddit app settings, also add your Cloudflare Worker URL and shared secret (same value as WORKER_SECRET on Cloudflare), save, then send a NEW alert. Quick fix: add Cloudflare secret CLOSED_TICKETS_WEBHOOK_SPECTRUM with your full Webhook 7 URL.`
           );
           return;
         }

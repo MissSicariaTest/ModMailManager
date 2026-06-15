@@ -50,10 +50,12 @@ export async function registerTicketWithWorker(ticket: TicketRecord): Promise<bo
   const config = await getWorkerConfig();
   if (!config) {
     console.error(
-      "Discord buttons will not work until Cloudflare Worker URL and shared secret are saved in Reddit app settings."
+      "Worker URL and shared secret are missing in Reddit app settings. Closed-ticket moves and ticket registration require both."
     );
     return false;
   }
+
+  await syncClosedWebhooksToWorker();
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
@@ -92,6 +94,9 @@ export async function registerTicketWithWorker(ticket: TicketRecord): Promise<bo
 export async function syncClosedWebhooksToWorker(): Promise<boolean> {
   const config = await getWorkerConfig();
   if (!config) {
+    console.error(
+      "Cannot sync Webhook 7 to the Worker because Cloudflare Worker URL and shared secret are missing in Reddit app settings."
+    );
     return false;
   }
 
@@ -101,12 +106,13 @@ export async function syncClosedWebhooksToWorker(): Promise<boolean> {
     (await settings.get("spectrumOfficialClosedTicketsWebhook")) as string | undefined
   )?.trim();
 
-  const toCredentials = (webhook?: string) => {
+  const toCredentials = (settingLabel: string, webhook?: string) => {
     if (!webhook) {
       return null;
     }
     const parsed = parseWebhookUrl(webhook);
     if (!parsed) {
+      console.error(`${settingLabel} is set but is not a valid Discord webhook URL.`);
       return null;
     }
     return {
@@ -115,6 +121,18 @@ export async function syncClosedWebhooksToWorker(): Promise<boolean> {
     };
   };
 
+  const payload = {
+    spectrum: toCredentials("Discord Webhook 7", spectrumWebhook),
+    spectrum_official: toCredentials("Discord Webhook 8", spectrumOfficialWebhook),
+  };
+
+  if (!payload.spectrum && !payload.spectrum_official) {
+    console.error(
+      "No closed-ticket webhooks found to sync. Add Discord Webhook 7 in Reddit app settings."
+    );
+    return false;
+  }
+
   try {
     const response = await fetch(`${config.url}/api/config/closed-webhooks`, {
       method: "POST",
@@ -122,10 +140,7 @@ export async function syncClosedWebhooksToWorker(): Promise<boolean> {
         "Content-Type": "application/json",
         Authorization: `Bearer ${config.secret}`,
       },
-      body: JSON.stringify({
-        spectrum: toCredentials(spectrumWebhook),
-        spectrum_official: toCredentials(spectrumOfficialWebhook),
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -134,6 +149,7 @@ export async function syncClosedWebhooksToWorker(): Promise<boolean> {
       return false;
     }
 
+    console.log("Synced closed-ticket webhooks to the Cloudflare Worker.");
     return true;
   } catch (error) {
     console.error("Worker closed webhook sync error:", getErrorMessage(error));

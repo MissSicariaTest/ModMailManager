@@ -383,7 +383,7 @@ async function sendTicketAlert(options: {
   redditKeyType?: RedditTicketKeyType;
   threadName?: string;
 }): Promise<void> {
-  void syncClosedWebhooksToWorker();
+  await syncClosedWebhooksToWorker();
 
   const parsed = parseWebhookUrl(options.webhook);
   if (!parsed) {

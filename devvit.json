@@ -72,13 +72,13 @@
       },
       "discordInteractionsWorkerUrl": {
         "type": "string",
-        "label": "Cloudflare Worker URL (optional)",
-        "helpText": "Optional but recommended. Syncs closed-ticket webhooks (Webhook 7/8) to the Worker and powers daily report ticket metrics."
+        "label": "Cloudflare Worker URL",
+        "helpText": "Required for closed-ticket moves. Example: https://modmail.your-name.workers.dev — must match your Worker. Reddit uses this to sync Webhook 7/8 to the Worker."
       },
       "discordInteractionsWorkerSecret": {
         "type": "string",
-        "label": "Cloudflare Worker shared secret (optional)",
-        "helpText": "Optional. Must match WORKER_SECRET in Cloudflare if you use the daily report ticket metrics."
+        "label": "Cloudflare Worker shared secret",
+        "helpText": "Required for closed-ticket moves. Must exactly match WORKER_SECRET on your Cloudflare Worker."
       },
       "discordBotToken": {
         "type": "string",
