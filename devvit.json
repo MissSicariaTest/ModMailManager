@@ -8,7 +8,10 @@
   "permissions": {
     "http": {
       "enable": true,
-      "domains": ["discord.com", "workers.dev"]
+      "domains": [
+        "discord.com",
+        "workers.dev"
+      ]
     },
     "redis": true,
     "reddit": {
@@ -20,27 +23,33 @@
     "subreddit": {
       "spectrumModmailWebhook": {
         "type": "string",
-        "label": "Webhook URL for r/Spectrum modmail alerts"
+        "label": "Discord Webhook 1",
+        "helpText": "Where your messages/notifications go."
       },
       "spectrumOfficialModmailWebhook": {
         "type": "string",
-        "label": "Webhook URL for r/Spectrum_Official modmail alerts"
+        "label": "Discord Webhook 2",
+        "helpText": "Where your messages/notifications go."
       },
       "spectrumModQueueWebhook": {
         "type": "string",
-        "label": "Webhook URL for r/Spectrum mod queue alerts"
+        "label": "Discord Webhook 3",
+        "helpText": "Where your messages/notifications go."
       },
       "spectrumOfficialModQueueWebhook": {
         "type": "string",
-        "label": "Webhook URL for r/Spectrum_Official mod queue alerts"
+        "label": "Discord Webhook 4",
+        "helpText": "Where your messages/notifications go."
       },
       "spectrumNewPostsWebhook": {
         "type": "string",
-        "label": "Webhook URL for r/Spectrum new posts alerts"
+        "label": "Discord Webhook 5",
+        "helpText": "Where your messages/notifications go."
       },
       "spectrumOfficialNewPostsWebhook": {
         "type": "string",
-        "label": "Webhook URL for r/Spectrum_Official new posts alerts"
+        "label": "Discord Webhook 6",
+        "helpText": "Where your messages/notifications go."
       },
       "reportingWebhook": {
         "type": "string",
@@ -107,5 +116,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch"
+  },
+  "dev": {
+    "subreddit": "modmailmanager_dev"
   }
 }
