@@ -1,0 +1,14 @@
+name = "modmail"
+main = "src/index.ts"
+compatibility_date = "2024-08-01"
+# Redeploy trigger: Discord-only button handling (e708788)
+
+# Create KV namespaces in Cloudflare Dashboard (Workers & Pages → KV),
+# then paste the IDs below before your first deploy.
+[[kv_namespaces]]
+binding = "TICKETS"
+id = "80e3428d9a73451d97e2c07fd153042b"
+
+[[kv_namespaces]]
+binding = "REPORT"
+id = "6da44aca5af949b88d908bbabfdb9130"

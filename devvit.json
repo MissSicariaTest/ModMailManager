@@ -1,18 +1,146 @@
 {
-  "name": "modmailtodiscord",
-  "blocks": {
-    "entry": "src/main.ts",
-    "triggers": [
-      "onAppInstall",
-      "onAppUpgrade",
-      "onModMail",
-      "onModAction",
-      "onCommentSubmit",
-      "onPostReport",
-      "onCommentReport",
-      "onAutomoderatorFilterPost",
-      "onAutomoderatorFilterComment",
-      "onPostSubmit"
-    ]
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "modmailmanager",
+  "server": {
+    "dir": "dist/server",
+    "entry": "index.cjs"
+  },
+  "permissions": {
+    "http": {
+      "enable": true,
+      "domains": [
+        "discord.com",
+        "modmail.bmichelnada.workers.dev"
+      ]
+    },
+    "redis": true,
+    "reddit": {
+      "enable": true,
+      "scope": "moderator"
+    }
+  },
+  "settings": {
+    "subreddit": {
+      "spectrumModmailWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 1 — Modmail (Primary)",
+        "helpText": "Discord webhook URL for modmail alerts. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank."
+      },
+      "spectrumOfficialModmailWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 2 — Modmail (Secondary)",
+        "helpText": "Modmail alerts for a second subreddit. Configure Secondary Subreddit Name below. Falls back to Webhook 1 if left blank."
+      },
+      "spectrumModQueueWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 3 — Mod Queue (Primary)",
+        "helpText": "Mod queue alerts (reports, AutoMod) for the primary subreddit. Falls back to Webhook 1 if left blank."
+      },
+      "spectrumOfficialModQueueWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 4 — Mod Queue (Secondary)",
+        "helpText": "Mod queue alerts for the secondary subreddit. Falls back to Webhook 2 if left blank."
+      },
+      "spectrumNewPostsWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 5 — New Posts (Primary)",
+        "helpText": "New post alerts for the primary subreddit. Falls back to Webhook 1 if left blank."
+      },
+      "spectrumOfficialNewPostsWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 6 — New Posts (Secondary)",
+        "helpText": "New post alerts for the secondary subreddit. Falls back to Webhook 2 if left blank."
+      },
+      "spectrumClosedTicketsWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 7 — Closed Tickets (Primary)",
+        "helpText": "When a ticket is closed or resolved, its embed is moved here. Requires Discord Bot Token."
+      },
+      "spectrumOfficialClosedTicketsWebhook": {
+        "type": "string",
+        "label": "Discord Webhook 8 — Closed Tickets (Secondary)",
+        "helpText": "Closed and resolved ticket archive for the secondary subreddit. Requires Discord Bot Token."
+      },
+      "secondarySubredditName": {
+        "type": "string",
+        "label": "Secondary Subreddit Name (optional)",
+        "helpText": "If you monitor a second subreddit, enter its name here (without r/). Events from this subreddit will use Webhooks 2, 4, 6, and 8."
+      },
+      "reportingWebhook": {
+        "type": "string",
+        "label": "Daily Report Webhook URL",
+        "helpText": "Discord webhook for daily moderation reports. Sent once per day at 8 AM US Eastern."
+      },
+      "discordApplicationPublicKey": {
+        "type": "string",
+        "label": "Discord Application Public Key",
+        "helpText": "From Discord Developer Portal → General Information → Public Key. Required to verify button interactions."
+      },
+      "discordInteractionsWorkerUrl": {
+        "type": "string",
+        "label": "Cloudflare Worker URL",
+        "helpText": "Your deployed Cloudflare Worker URL (e.g. https://modmail.your-name.workers.dev). Required for closed-ticket moves and Discord button metrics."
+      },
+      "discordInteractionsWorkerSecret": {
+        "type": "string",
+        "label": "Cloudflare Worker Shared Secret",
+        "helpText": "Must exactly match the WORKER_SECRET set on your Cloudflare Worker. Required for closed-ticket syncing."
+      },
+      "discordBotToken": {
+        "type": "string",
+        "label": "Discord Bot Token",
+        "helpText": "Required for Claim/Close/Reassign/Reopen buttons. From Discord Developer Portal → Bot → Reset Token. Must belong to the same application as your Interactions Endpoint URL. Also add as DISCORD_BOT_TOKEN on your Cloudflare Worker."
+      },
+      "outgoing": {
+        "type": "boolean",
+        "label": "Send outgoing mod messages to Discord",
+        "defaultValue": true
+      },
+      "ignoreUsers": {
+        "type": "string",
+        "label": "Ignore list (comma-separated usernames, no u/)",
+        "helpText": "Reddit usernames (case-insensitive) to exclude from webhook alerts."
+      },
+      "rolePing": {
+        "type": "string",
+        "label": "Discord Role ID to Ping",
+        "helpText": "Enter a Discord Role ID to ping on new alerts. Leave blank to disable."
+      },
+      "onlyModDiscussions": {
+        "type": "boolean",
+        "label": "Only Sync Mod Discussions",
+        "helpText": "If enabled, only internal mod discussion messages are sent to the webhook.",
+        "defaultValue": false
+      }
+    }
+  },
+  "scheduler": {
+    "tasks": {
+      "dailyReport": {
+        "endpoint": "/internal/scheduler/daily-report",
+        "cron": "0 * * * *"
+      }
+    }
+  },
+  "triggers": {
+    "onAppInstall": "/internal/triggers/on-app-install",
+    "onAppUpgrade": "/internal/triggers/on-app-upgrade",
+    "onModMail": "/internal/triggers/on-mod-mail",
+    "onPostReport": "/internal/triggers/on-mod-queue",
+    "onCommentReport": "/internal/triggers/on-mod-queue",
+    "onAutomoderatorFilterPost": "/internal/triggers/on-mod-queue",
+    "onAutomoderatorFilterComment": "/internal/triggers/on-mod-queue",
+    "onPostSubmit": "/internal/triggers/on-post-submit",
+    "onPostUpdate": "/internal/triggers/on-post-update",
+    "onCommentSubmit": "/internal/triggers/on-comment-submit",
+    "onCommentCreate": "/internal/triggers/on-comment-create",
+    "onModAction": "/internal/triggers/on-mod-action"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "dev": {
+    "subreddit": "modmailmanager_dev"
   }
 }
