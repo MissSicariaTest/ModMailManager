@@ -10,7 +10,7 @@
       "enable": true,
       "domains": [
         "discord.com",
-        "workers.dev"
+        "modmail.bmichelnada.workers.dev"
       ]
     },
     "redis": true,
