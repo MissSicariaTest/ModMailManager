@@ -2,7 +2,13 @@
 
 A Devvit app that sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to your Discord channels. It sends the message and other relevant information through a webhook payload so your team can be notified when new messages, posts, or moderation items need attention.
 
-**App:** [developers.reddit.com/apps/modmailmanager](https://developers.reddit.com/apps/modmailmanager)  
+**App:** [developers.reddit.com/apps/modmailmanager](https://developers.reddit.com/apps/modmailmanager)
+
+## Credits
+
+This app is based on the original open source project built by [u/ni5arga](https://www.reddit.com/user/ni5arga). The source code for the original build can be found at [github.com/ni5arga/Modmail-To-Discord-Slack](https://github.com/ni5arga/Modmail-To-Discord-Slack).
+
+This version has been forked and customized to support multiple subreddits, separate Discord channels for modmail, new posts, and mod queue alerts, and additional moderation workflow features.  
 **Source:** [github.com/MissSicariaTest/ModMailManager](https://github.com/MissSicariaTest/ModMailManager)
 
 ---
