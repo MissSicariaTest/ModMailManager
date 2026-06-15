@@ -21,42 +21,42 @@
   },
   "settings": {
     "subreddit": {
-      "primaryModmailWebhook": {
+      "spectrumModmailWebhook": {
         "type": "string",
         "label": "Discord Webhook 1 — Modmail (Primary)",
         "helpText": "Discord webhook URL for modmail alerts. Also used for mod queue and new posts if Webhooks 3 or 5 are left blank."
       },
-      "secondaryModmailWebhook": {
+      "spectrumOfficialModmailWebhook": {
         "type": "string",
         "label": "Discord Webhook 2 — Modmail (Secondary)",
         "helpText": "Modmail alerts for a second subreddit. Configure Secondary Subreddit Name below. Falls back to Webhook 1 if left blank."
       },
-      "primaryModQueueWebhook": {
+      "spectrumModQueueWebhook": {
         "type": "string",
         "label": "Discord Webhook 3 — Mod Queue (Primary)",
         "helpText": "Mod queue alerts (reports, AutoMod) for the primary subreddit. Falls back to Webhook 1 if left blank."
       },
-      "secondaryModQueueWebhook": {
+      "spectrumOfficialModQueueWebhook": {
         "type": "string",
         "label": "Discord Webhook 4 — Mod Queue (Secondary)",
         "helpText": "Mod queue alerts for the secondary subreddit. Falls back to Webhook 2 if left blank."
       },
-      "primaryNewPostsWebhook": {
+      "spectrumNewPostsWebhook": {
         "type": "string",
         "label": "Discord Webhook 5 — New Posts (Primary)",
         "helpText": "New post alerts for the primary subreddit. Falls back to Webhook 1 if left blank."
       },
-      "secondaryNewPostsWebhook": {
+      "spectrumOfficialNewPostsWebhook": {
         "type": "string",
         "label": "Discord Webhook 6 — New Posts (Secondary)",
         "helpText": "New post alerts for the secondary subreddit. Falls back to Webhook 2 if left blank."
       },
-      "primaryClosedTicketsWebhook": {
+      "spectrumClosedTicketsWebhook": {
         "type": "string",
         "label": "Discord Webhook 7 — Closed Tickets (Primary)",
         "helpText": "When a ticket is closed or resolved, its embed is moved here. Requires Discord Bot Token."
       },
-      "secondaryClosedTicketsWebhook": {
+      "spectrumOfficialClosedTicketsWebhook": {
         "type": "string",
         "label": "Discord Webhook 8 — Closed Tickets (Secondary)",
         "helpText": "Closed and resolved ticket archive for the secondary subreddit. Requires Discord Bot Token."

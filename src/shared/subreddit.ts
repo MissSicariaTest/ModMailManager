@@ -51,8 +51,8 @@ export function getClosedWebhookSettingName(
 ): string {
   const group = resolveSubredditGroup(subredditName, secondarySubredditName);
   return group === "spectrum"
-    ? "primaryClosedTicketsWebhook"
-    : "secondaryClosedTicketsWebhook";
+    ? "spectrumClosedTicketsWebhook"
+    : "spectrumOfficialClosedTicketsWebhook";
 }
 
 export function getWebhookSettingName(
@@ -65,21 +65,21 @@ export function getWebhookSettingName(
   if (group === "spectrum") {
     switch (category) {
       case "modmail":
-        return "primaryModmailWebhook";
+        return "spectrumModmailWebhook";
       case "modqueue":
-        return "primaryModQueueWebhook";
+        return "spectrumModQueueWebhook";
       case "newposts":
-        return "primaryNewPostsWebhook";
+        return "spectrumNewPostsWebhook";
     }
   }
 
   switch (category) {
     case "modmail":
-      return "secondaryModmailWebhook";
+      return "spectrumOfficialModmailWebhook";
     case "modqueue":
-      return "secondaryModQueueWebhook";
+      return "spectrumOfficialModQueueWebhook";
     case "newposts":
-      return "secondaryNewPostsWebhook";
+      return "spectrumOfficialNewPostsWebhook";
   }
 }
 
