@@ -899,17 +899,17 @@ function parseReassignModalValues(interaction: DiscordInteraction): {
 }
 
 function buildUpdateMessageResponse(ticket: TicketRecord, pingUserId?: string): unknown {
-  return {
-    type: 7,
-    data: {
-      content: pingUserId
-        ? `<@${pingUserId}> You have been assigned this ticket.`
-        : undefined,
-      allowed_mentions: pingUserId ? { parse: [], users: [pingUserId] } : undefined,
-      embeds: [buildTicketEmbed(ticket)],
-      components: buildTicketButtons(ticket.id, ticket.status),
-    },
+  const data: Record<string, unknown> = {
+    embeds: [buildTicketEmbed(ticket)],
+    components: buildTicketButtons(ticket.id, ticket.status),
   };
+
+  if (pingUserId) {
+    data.content = `<@${pingUserId}> You have been assigned this ticket.`;
+    data.allowed_mentions = { parse: [], users: [pingUserId] };
+  }
+
+  return { type: 7, data };
 }
 
 async function getWebhookChannelId(webhookId: string, webhookToken: string): Promise<string | null> {
