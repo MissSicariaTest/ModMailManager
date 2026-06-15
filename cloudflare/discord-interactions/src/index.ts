@@ -108,6 +108,10 @@ export default {
       return handleDiscordInteraction(request, env, ctx);
     }
 
+    if (request.method === "GET" && url.pathname === "/api/health") {
+      return getHealthStatus(env);
+    }
+
     if (request.method === "GET" && url.pathname === "/") {
       return new Response("Spectrum Modmail Discord interactions worker", { status: 200 });
     }
@@ -119,6 +123,21 @@ export default {
 function authorizeWorker(request: Request, env: Env): boolean {
   const auth = request.headers.get("Authorization") ?? "";
   return auth === `Bearer ${env.WORKER_SECRET}`;
+}
+
+function isSecretConfigured(value: string | undefined): boolean {
+  return Boolean(value?.trim());
+}
+
+function getHealthStatus(env: Env): Response {
+  return Response.json({
+    ok: isSecretConfigured(env.DISCORD_PUBLIC_KEY) && isSecretConfigured(env.WORKER_SECRET),
+    secrets: {
+      DISCORD_PUBLIC_KEY: isSecretConfigured(env.DISCORD_PUBLIC_KEY),
+      WORKER_SECRET: isSecretConfigured(env.WORKER_SECRET),
+      DISCORD_BOT_TOKEN: isSecretConfigured(env.DISCORD_BOT_TOKEN),
+    },
+  });
 }
 
 async function registerTicket(request: Request, env: Env): Promise<Response> {
@@ -170,7 +189,11 @@ async function handleDiscordInteraction(
 
   if (!publicKey) {
     console.error("DISCORD_PUBLIC_KEY is not configured on the worker.");
-    return interactionResponse(ephemeral("Discord interactions are not configured."));
+    return interactionResponse(
+      ephemeral(
+        "Button actions are not configured yet. In Cloudflare, add a worker secret named DISCORD_PUBLIC_KEY using the Public Key from Discord Developer Portal → General Information."
+      )
+    );
   }
 
   const isValid = await verifyKey(rawBody, signature, timestamp, publicKey);

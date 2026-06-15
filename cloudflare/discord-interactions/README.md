@@ -37,11 +37,13 @@ Also click **Clear build cache** under Build settings, then create a **new** dep
    - **Workers & Pages → KV** → Create namespace **`spectrum-modmail-tickets`**
    - Create namespace **`spectrum-modmail-report`**
    - Copy both namespace IDs into `wrangler.toml` (replace `REPLACE_WITH_*`)
-7. **Settings → Variables** (secrets):
-   - `DISCORD_PUBLIC_KEY` — from Discord Developer Portal → General Information → Public Key
-   - `DISCORD_BOT_TOKEN` — from Discord Developer Portal → Bot → Token (same app as Interactions Endpoint)
+7. **Settings → Variables** (secrets — required after every new worker or Git deploy):
+   - `DISCORD_PUBLIC_KEY` — from Discord Developer Portal → General Information → **Public Key**
+   - `DISCORD_BOT_TOKEN` — from Discord Developer Portal → Bot → Token
    - `WORKER_SECRET` — generate a long random string (same value goes in Reddit app settings)
-8. Deploy. Copy the worker URL, e.g. `https://spectrum-modmail-discord.your-subdomain.workers.dev`
+8. Deploy. Copy the worker URL, e.g. `https://modmail.your-subdomain.workers.dev`
+
+Check configuration anytime: `GET https://your-worker.workers.dev/api/health`
 
 ### Discord Developer Portal
 
