@@ -14,7 +14,11 @@ export function resolveSubredditGroup(
   subredditName: string
 ): MonitoredSubreddit | null {
   const normalized = normalizeSubredditName(subredditName);
-  if (normalized === PLAYTEST_SUBREDDIT || normalized === "spectrum") {
+  if (
+    normalized === PLAYTEST_SUBREDDIT ||
+    normalized === "modmailmanager_dev" ||
+    normalized === "spectrum"
+  ) {
     return "spectrum";
   }
   if (normalized === "spectrum_official") {

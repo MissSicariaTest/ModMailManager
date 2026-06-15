@@ -118,6 +118,6 @@
     "dev": "vite build --watch"
   },
   "dev": {
-    "subreddit": "modmailmanager_dev"
+    "subreddit": "spectrum_modmail_dev"
   }
 }

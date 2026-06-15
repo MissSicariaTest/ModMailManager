@@ -79,7 +79,9 @@ async function getWebhookUrl(
 
   const webhook = (await settings.get(settingName)) as string | undefined;
   if (!webhook) {
-    console.error(`No webhook URL configured for setting "${settingName}"`);
+    console.error(
+      `No webhook URL configured for setting "${settingName}". Open the app settings page for this subreddit and fill in the matching Discord Webhook field, then click Save Changes.`
+    );
     return null;
   }
 
@@ -166,9 +168,23 @@ async function sendTicketAlert(options: {
     components: buildTicketButtons(ticketId, "open"),
   };
 
-  const message = await sendDiscordWebhook(options.webhook, payload, true);
+  let message = await sendDiscordWebhook(options.webhook, payload, true);
   if (!message) {
-    return;
+    console.warn(
+      "Ticket alert with buttons failed; retrying with embed-only payload (channel webhooks may not support buttons)."
+    );
+    message = await sendDiscordWebhook(
+      options.webhook,
+      {
+        content: options.content,
+        embeds: [options.embed],
+      },
+      true
+    );
+    if (!message) {
+      console.error("Failed to send Discord alert after embed-only fallback.");
+      return;
+    }
   }
 
   draftTicket.messageId = message.id;
