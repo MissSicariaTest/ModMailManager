@@ -3,6 +3,8 @@
  * Discord POSTs button clicks here (public). Devvit POSTs new tickets here on register.
  */
 
+import { verifyKey } from "discord-interactions";
+
 export interface Env {
   TICKETS: KVNamespace;
   REPORT: KVNamespace;
@@ -87,7 +89,7 @@ const FIELD_LENGTH = 1024;
 const OPEN_TICKETS_KEY = "tickets:open";
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "POST" && url.pathname === "/api/tickets/register") {
@@ -103,7 +105,7 @@ export default {
     }
 
     if (request.method === "POST" && (url.pathname === "/" || url.pathname === "/discord/interactions")) {
-      return handleDiscordInteraction(request, env);
+      return handleDiscordInteraction(request, env, ctx);
     }
 
     if (request.method === "GET" && url.pathname === "/") {
@@ -156,28 +158,47 @@ async function resetReportSnapshot(request: Request, env: Env): Promise<Response
   return Response.json({ ok: true });
 }
 
-async function handleDiscordInteraction(request: Request, env: Env): Promise<Response> {
+async function handleDiscordInteraction(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const signature = request.headers.get("X-Signature-Ed25519") ?? "";
+  const timestamp = request.headers.get("X-Signature-Timestamp") ?? "";
   const rawBody = await request.text();
+  const publicKey = env.DISCORD_PUBLIC_KEY?.trim();
 
-  if (!(await verifyDiscordSignature(request, rawBody, env.DISCORD_PUBLIC_KEY))) {
+  if (!publicKey) {
+    console.error("DISCORD_PUBLIC_KEY is not configured on the worker.");
+    return interactionResponse(ephemeral("Discord interactions are not configured."));
+  }
+
+  const isValid = await verifyKey(rawBody, signature, timestamp, publicKey);
+  if (!isValid) {
+    console.error("Discord interaction signature verification failed.");
     return new Response("Invalid signature", { status: 401 });
   }
 
-  const interaction = JSON.parse(rawBody) as DiscordInteraction;
+  try {
+    const interaction = JSON.parse(rawBody) as DiscordInteraction;
 
-  if (interaction.type === 1) {
-    return Response.json({ type: 1 });
+    if (interaction.type === 1) {
+      return interactionResponse({ type: 1 });
+    }
+
+    if (interaction.type === 3) {
+      return handleButton(interaction, env, ctx);
+    }
+
+    if (interaction.type === 5) {
+      return handleModal(interaction, env, ctx);
+    }
+
+    return interactionResponse(ephemeral("Unsupported interaction type."));
+  } catch (error) {
+    console.error("Discord interaction handler error:", error);
+    return interactionResponse(ephemeral("Something went wrong handling this button."));
   }
-
-  if (interaction.type === 3) {
-    return handleButton(interaction, env);
-  }
-
-  if (interaction.type === 5) {
-    return handleModal(interaction, env);
-  }
-
-  return Response.json(ephemeral("Unsupported interaction type."));
 }
 
 type DiscordInteraction = {
@@ -190,50 +211,63 @@ type DiscordInteraction = {
   };
 };
 
-async function handleButton(interaction: DiscordInteraction, env: Env): Promise<Response> {
+async function handleButton(
+  interaction: DiscordInteraction,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const customId = interaction.data?.custom_id;
   if (!customId) {
-    return Response.json(ephemeral("Missing button id."));
+    return interactionResponse(ephemeral("Missing button id."));
   }
 
   const parsed = parseTicketCustomId(customId);
   if (!parsed) {
-    return Response.json(ephemeral("Unknown button."));
+    return interactionResponse(ephemeral("Unknown button."));
   }
 
   const actor = getInteractionUser(interaction);
   if (!actor) {
-    return Response.json(ephemeral("Unable to identify Discord user."));
+    return interactionResponse(ephemeral("Unable to identify Discord user."));
   }
 
   const ticket = await getTicket(env, parsed.ticketId);
   if (!ticket) {
-    return Response.json(ephemeral("Ticket not found. It may not have synced from Reddit yet."));
+    return interactionResponse(
+      ephemeral("Ticket not found. It may not have synced from Reddit yet.")
+    );
   }
 
   if (parsed.action === "reassign") {
     const err = isTicketActionAllowed(ticket, parsed.action);
     if (err) {
-      return Response.json(ephemeral(err));
+      return interactionResponse(ephemeral(err));
     }
-    return Response.json(buildReassignModal(parsed.ticketId));
+    return interactionResponse(buildReassignModal(parsed.ticketId));
   }
 
   const err = isTicketActionAllowed(ticket, parsed.action);
   if (err) {
-    return Response.json(ephemeral(err));
+    return interactionResponse(ephemeral(err));
   }
 
   const updated = await applyTicketAction(env, ticket, parsed.action, actor);
-  await trackAction(env, updated.subreddit, parsed.action, actor.username);
-  await editTicketMessage(updated, env);
-  return Response.json(buildUpdateMessageResponse(updated));
+  ctx.waitUntil(
+    trackAction(env, updated.subreddit, parsed.action, actor.username).catch((error) => {
+      console.error("Failed to track ticket action:", error);
+    })
+  );
+  return interactionResponse(buildUpdateMessageResponse(updated));
 }
 
-async function handleModal(interaction: DiscordInteraction, env: Env): Promise<Response> {
+async function handleModal(
+  interaction: DiscordInteraction,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const customId = interaction.data?.custom_id;
   if (!customId?.startsWith("reassign:")) {
-    return Response.json(ephemeral("Unknown modal."));
+    return interactionResponse(ephemeral("Unknown modal."));
   }
 
   const ticketId = customId.replace("reassign:", "");
@@ -241,28 +275,31 @@ async function handleModal(interaction: DiscordInteraction, env: Env): Promise<R
     interaction.data?.components?.[0]?.components?.[0]?.value?.trim() ?? "";
 
   if (!assigneeName) {
-    return Response.json(ephemeral("Please enter a team member name."));
+    return interactionResponse(ephemeral("Please enter a team member name."));
   }
 
   const actor = getInteractionUser(interaction);
   if (!actor) {
-    return Response.json(ephemeral("Unable to identify Discord user."));
+    return interactionResponse(ephemeral("Unable to identify Discord user."));
   }
 
   const ticket = await getTicket(env, ticketId);
   if (!ticket) {
-    return Response.json(ephemeral("Ticket not found."));
+    return interactionResponse(ephemeral("Ticket not found."));
   }
 
   const err = isTicketActionAllowed(ticket, "reassign");
   if (err) {
-    return Response.json(ephemeral(err));
+    return interactionResponse(ephemeral(err));
   }
 
   const updated = await applyTicketAction(env, ticket, "reassign", actor, assigneeName);
-  await trackAction(env, updated.subreddit, "reassign", actor.username);
-  await editTicketMessage(updated, env);
-  return Response.json(buildUpdateMessageResponse(updated));
+  ctx.waitUntil(
+    trackAction(env, updated.subreddit, "reassign", actor.username).catch((error) => {
+      console.error("Failed to track ticket action:", error);
+    })
+  );
+  return interactionResponse(buildUpdateMessageResponse(updated));
 }
 
 async function saveTicket(env: Env, ticket: TicketRecord): Promise<void> {
@@ -565,58 +602,6 @@ function buildUpdateMessageResponse(ticket: TicketRecord): unknown {
   };
 }
 
-async function editTicketMessage(ticket: TicketRecord, env: Env): Promise<boolean> {
-  const payload = {
-    embeds: [buildTicketEmbed(ticket)],
-    components: buildTicketButtons(ticket.id, ticket.status),
-  };
-
-  if (env.DISCORD_BOT_TOKEN && ticket.channelId && ticket.messageId) {
-    const response = await fetch(
-      `https://discord.com/api/v10/channels/${ticket.channelId}/messages/${ticket.messageId}`,
-      {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      }
-    );
-
-    if (response.ok) {
-      return true;
-    }
-
-    const body = await response.text().catch(() => "");
-    console.error(`Bot message edit failed: ${response.status} ${body}`);
-  }
-
-  return editWebhookMessage(ticket);
-}
-
-async function editWebhookMessage(ticket: TicketRecord): Promise<boolean> {
-  const url = `https://discord.com/api/webhooks/${ticket.webhookId}/${ticket.webhookToken}/messages/${ticket.messageId}?with_components=true`;
-  const response = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      embeds: [buildTicketEmbed(ticket)],
-      components: buildTicketButtons(ticket.id, ticket.status),
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    console.error(`Webhook message edit failed: ${response.status} ${body}`);
-    return false;
-  }
-
-  return true;
-}
-
 function buildReassignModal(ticketId: string): unknown {
   return {
     type: 9,
@@ -648,42 +633,9 @@ function ephemeral(content: string): unknown {
   return { type: 4, data: { content, flags: 64 } };
 }
 
-function hexToUint8Array(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = Number.parseInt(hex.slice(i, i + 2), 16);
-  }
-  return bytes;
-}
-
-async function verifyDiscordSignature(
-  request: Request,
-  body: string,
-  publicKeyHex: string
-): Promise<boolean> {
-  const signature = request.headers.get("X-Signature-Ed25519");
-  const timestamp = request.headers.get("X-Signature-Timestamp");
-
-  if (!signature || !timestamp || !publicKeyHex) {
-    return false;
-  }
-
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      hexToUint8Array(publicKeyHex),
-      { name: "Ed25519", namedCurve: "Ed25519" },
-      false,
-      ["verify"]
-    );
-
-    return crypto.subtle.verify(
-      "Ed25519",
-      key,
-      hexToUint8Array(signature),
-      new TextEncoder().encode(timestamp + body)
-    );
-  } catch {
-    return false;
-  }
+function interactionResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
