@@ -307,10 +307,6 @@ npm run deploy
 
 ---
 
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
 ## Contributing
 
 Pull requests and issues are welcome. Feel free to fork and customize this for your own subreddit.
