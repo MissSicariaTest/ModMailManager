@@ -1,8 +1,8 @@
-# ModMailModerator
+# ModMailManager
 
 A Devvit app that sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to your Discord channels. It sends the message and other relevant information through a webhook payload so your team can be notified when new messages, posts, or moderation items need attention.
 
-**App:** [developers.reddit.com/apps/modmailmoderator](https://developers.reddit.com/apps/modmailmoderator)  
+**App:** [developers.reddit.com/apps/modmailmanager](https://developers.reddit.com/apps/modmailmanager)  
 **Source:** [github.com/MissSicariaTest/ModMailManager](https://github.com/MissSicariaTest/ModMailManager)
 
 ---
@@ -25,7 +25,7 @@ A Devvit app that sends incoming modmail messages, new posts, and mod queue aler
 
 ### Step 1 — Install the App
 
-1. Go to [developers.reddit.com/apps/modmailmoderator](https://developers.reddit.com/apps/modmailmoderator)
+1. Go to [developers.reddit.com/apps/modmailmanager](https://developers.reddit.com/apps/modmailmanager)
 2. Click **Install**
 3. Select the subreddit you want to install it on
 4. Approve the requested permissions (moderator scope is required to read modmail and mod queue events)
@@ -58,7 +58,7 @@ Keep these URLs private. Anyone with a webhook URL can post to that channel.
 
 1. Go to your subreddit's app settings page at:
 
-   `https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmoderator`
+   `https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmanager`
 
    Replace `YOUR-SUBREDDIT-NAME` with your subreddit's name (without `r/`).
 
@@ -216,7 +216,7 @@ Discord will send a verification ping to the Worker automatically.
 
 ### Add Secrets to Reddit App Settings
 
-Go to `https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmoderator` and fill in:
+Go to `https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmanager` and fill in:
 
 | Setting | Value |
 | --- | --- |

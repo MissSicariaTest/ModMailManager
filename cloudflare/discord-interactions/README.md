@@ -1,6 +1,6 @@
-# ModMailModerator — Discord Interactions Worker (Cloudflare)
+# ModMailManager — Discord Interactions Worker (Cloudflare)
 
-This Cloudflare Worker handles **Discord button interactions** for ModMailModerator. When a moderator clicks a ticket button (Claim, Close, Resolved, etc.) in Discord, Discord sends the interaction here. The Worker updates the ticket state, edits the embed in-place, and moves closed tickets to the archive channel.
+This Cloudflare Worker handles **Discord button interactions** for ModMailManager. When a moderator clicks a ticket button (Claim, Close, Resolved, etc.) in Discord, Discord sends the interaction here. The Worker updates the ticket state, edits the embed in-place, and moves closed tickets to the archive channel.
 
 Reddit Devvit cannot receive public inbound webhooks from Discord, so all button click handling runs in this Worker rather than the Reddit app.
 
@@ -93,7 +93,7 @@ After deploying, copy your Worker URL (for example `https://modmail.your-name.wo
 
 ## Reddit App Settings
 
-Go to `https://developers.reddit.com/r/YOUR-SUBREDDIT/apps/modmailmoderator` and fill in:
+Go to `https://developers.reddit.com/r/YOUR-SUBREDDIT/apps/modmailmanager` and fill in:
 
 | Setting | Value |
 | --- | --- |

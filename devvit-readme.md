@@ -1,4 +1,4 @@
-# ModMailModerator
+# ModMailManager
 
 A Devvit app that sends incoming modmail messages, new posts, and mod queue alerts from your subreddit to your Discord channels. It sends the message and other relevant information through a webhook payload so your team can be notified when new messages, posts, or moderation items need attention.
 
@@ -42,7 +42,7 @@ For each Discord channel you want to receive alerts:
 
 Go to your subreddit's app settings at:
 
-`https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmoderator`
+`https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmanager`
 
 Paste each webhook URL into the corresponding field and click **Save Changes**.
 

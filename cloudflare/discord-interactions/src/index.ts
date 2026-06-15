@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker: Discord button interactions for ModMailModerator.
+ * Cloudflare Worker: Discord button interactions for ModMailManager.
  * Discord POSTs button clicks here (public). Devvit POSTs new tickets here on register.
  */
 
@@ -154,7 +154,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/") {
-      return new Response("ModMailModerator Discord interactions worker", { status: 200 });
+      return new Response("ModMailManager Discord interactions worker", { status: 200 });
     }
 
     return new Response("Not found", { status: 404 });

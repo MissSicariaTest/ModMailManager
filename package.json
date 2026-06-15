@@ -1,8 +1,8 @@
 {
   "private": true,
-  "name": "modmailmoderator",
+  "name": "modmailmanager",
   "version": "0.0.0",
-  "description": "ModMailModerator — sends Reddit modmail, new posts, and mod queue alerts to Discord. Includes optional Discord ticket management with Claim, Close, Reassign, and more.",
+  "description": "ModMailManager — sends Reddit modmail, new posts, and mod queue alerts to Discord. Includes optional Discord ticket management with Claim, Close, Reassign, and more.",
   "license": "MIT",
   "type": "module",
   "scripts": {
