@@ -1,4 +1,4 @@
-import { redis, settings } from "@devvit/web/server";
+import { reddit, redis, settings } from "@devvit/web/server";
 import {
   DAILY_REPORT_REDIS_KEY,
   DAILY_REPORT_SENT_REDIS_KEY,
@@ -303,9 +303,10 @@ async function buildSubredditReportFields(
   subreddit: MonitoredSubreddit,
   metrics: SubredditMetrics,
   store: DailyReportStore,
-  workerSnapshot: WorkerReportSnapshot | null
+  workerSnapshot: WorkerReportSnapshot | null,
+  subredditLabel?: string
 ): Promise<DiscordEmbedField[]> {
-  const label = displaySubredditLabel(subreddit);
+  const label = subredditLabel ?? displaySubredditLabel(subreddit);
   const workerMetrics = workerSnapshot?.subreddits[subreddit];
   const openUnclaimed =
     workerMetrics?.openUnclaimed ?? (await countOpenUnclaimedTickets(subreddit));
@@ -498,13 +499,24 @@ export async function sendDailyReport(): Promise<void> {
 
   const secondarySubredditName = ((await settings.get("secondarySubredditName")) as string | undefined)?.trim() || null;
 
+  let primarySubredditName: string;
+  try {
+    const sub = await reddit.getCurrentSubreddit();
+    primarySubredditName = sub.name;
+  } catch {
+    primarySubredditName = "Primary Subreddit";
+  }
+
   const store = await getDailyReportStore();
   finalizeModmailConversationMetrics(store);
   reconcilePostMetrics(store);
   const workerSnapshot = await fetchWorkerReportSnapshot();
 
   const generatedAt = new Date();
-  const footerText = truncateField(`Report generated ${formatReportGeneratedAt(generatedAt)}`);
+  const workerNote = workerSnapshot === null
+    ? "⚠️ Discord ticket actions unavailable — Worker domain not yet approved in Devvit settings."
+    : null;
+  const footerText = truncateField(`Report generated ${formatReportGeneratedAt(generatedAt)}${workerNote ? ` | ${workerNote}` : ""}`);
   const periodField: DiscordEmbedField = {
     name: "Reporting Period",
     value: truncateField(formatReportingPeriod(store, generatedAt)),
@@ -512,14 +524,15 @@ export async function sendDailyReport(): Promise<void> {
 
   const embeds: DiscordWebhookPayload["embeds"] = [
     {
-      title: truncateTitle("Daily Moderation Report"),
+      title: truncateTitle(`Daily Moderation Report — r/${primarySubredditName}`),
       fields: [
         periodField,
         ...(await buildSubredditReportFields(
           "spectrum",
           getMetrics(store, "spectrum"),
           store,
-          workerSnapshot
+          workerSnapshot,
+          `r/${primarySubredditName}`
         )),
       ],
       color: SPECTRUM_BLUE,
@@ -534,7 +547,8 @@ export async function sendDailyReport(): Promise<void> {
         "spectrum_official",
         getMetrics(store, "spectrum_official"),
         store,
-        workerSnapshot
+        workerSnapshot,
+        `r/${secondarySubredditName}`
       ),
       color: SPECTRUM_BLUE,
       footer: { text: footerText },
