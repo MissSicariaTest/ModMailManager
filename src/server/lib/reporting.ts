@@ -496,6 +496,8 @@ export async function sendDailyReport(): Promise<void> {
     return;
   }
 
+  const secondarySubredditName = ((await settings.get("secondarySubredditName")) as string | undefined)?.trim() || null;
+
   const store = await getDailyReportStore();
   finalizeModmailConversationMetrics(store);
   reconcilePostMetrics(store);
@@ -508,37 +510,38 @@ export async function sendDailyReport(): Promise<void> {
     value: truncateField(formatReportingPeriod(store, generatedAt)),
   };
 
-  const payload: DiscordWebhookPayload = {
-    embeds: [
-      {
-        title: truncateTitle("Daily Moderation Report"),
-        fields: [
-          periodField,
-          ...(await buildSubredditReportFields(
-            "spectrum",
-            getMetrics(store, "spectrum"),
-            store,
-            workerSnapshot
-          )),
-        ],
-        color: SPECTRUM_BLUE,
-        footer: { text: footerText },
-      },
-      {
-        title: truncateTitle("Daily Moderation Report — r/Spectrum_Official"),
-        fields: await buildSubredditReportFields(
-          "spectrum_official",
-          getMetrics(store, "spectrum_official"),
+  const embeds: DiscordWebhookPayload["embeds"] = [
+    {
+      title: truncateTitle("Daily Moderation Report"),
+      fields: [
+        periodField,
+        ...(await buildSubredditReportFields(
+          "spectrum",
+          getMetrics(store, "spectrum"),
           store,
           workerSnapshot
-        ),
-        color: SPECTRUM_BLUE,
-        footer: { text: footerText },
-      },
-    ],
-  };
+        )),
+      ],
+      color: SPECTRUM_BLUE,
+      footer: { text: footerText },
+    },
+  ];
 
-  await sendDiscordWebhook(webhook, payload);
+  if (secondarySubredditName) {
+    embeds.push({
+      title: truncateTitle(`Daily Moderation Report — r/${secondarySubredditName}`),
+      fields: await buildSubredditReportFields(
+        "spectrum_official",
+        getMetrics(store, "spectrum_official"),
+        store,
+        workerSnapshot
+      ),
+      color: SPECTRUM_BLUE,
+      footer: { text: footerText },
+    });
+  }
+
+  await sendDiscordWebhook(webhook, { embeds });
 }
 
 export async function safeTrack(task: () => Promise<void>): Promise<void> {
