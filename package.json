@@ -21,15 +21,15 @@
     "test:unit": "vitest --run --passWithNoTests"
   },
   "dependencies": {
-    "@devvit/web": "0.13.3",
+    "@devvit/web": "^0.13.4",
     "hono": "4.12.25"
   },
   "devDependencies": {
-    "@devvit/public-api": "0.13.3",
-    "@devvit/start": "0.13.3",
+    "@devvit/public-api": "^0.13.4",
+    "@devvit/start": "^0.13.4",
     "@hono/node-server": "2.0.5",
     "@types/node": "^22.19.0",
-    "devvit": "0.13.3",
+    "devvit": "^0.13.4",
     "typescript": "5.9.3",
     "vite": "7.2.6",
     "vitest": "^4.0.14"
