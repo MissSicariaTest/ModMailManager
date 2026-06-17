@@ -307,6 +307,15 @@ npm run deploy
 
 ---
 
+## Changelog
+
+**June 17, 2026 Update**
+
+- Fixed ticket close behavior so related Discord threads are now deleted when a ticket is closed or resolved. Previous behavior only moved the original Discord embed to the closed channel while the related thread was left behind in the original channel.
+- Fixed the daily moderation report so the subreddit name is no longer hardcoded and now uses the actual installed subreddit name dynamically. The secondary subreddit section is also suppressed when no secondary subreddit is configured.
+
+---
+
 ## Contributing
 
 Pull requests and issues are welcome. Feel free to fork and customize this for your own subreddit.

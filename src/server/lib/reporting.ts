@@ -497,8 +497,6 @@ export async function sendDailyReport(): Promise<void> {
     return;
   }
 
-  const secondarySubredditName = ((await settings.get("secondarySubredditName")) as string | undefined)?.trim() || null;
-
   let primarySubredditName: string;
   try {
     const sub = await reddit.getCurrentSubreddit();
@@ -506,6 +504,13 @@ export async function sendDailyReport(): Promise<void> {
   } catch {
     primarySubredditName = "Primary Subreddit";
   }
+
+  const rawSecondary = ((await settings.get("secondarySubredditName")) as string | undefined)?.trim() || null;
+  // Only show the secondary section if a different subreddit name is actually configured
+  const secondarySubredditName =
+    rawSecondary && rawSecondary.toLowerCase() !== primarySubredditName.toLowerCase()
+      ? rawSecondary
+      : null;
 
   const store = await getDailyReportStore();
   finalizeModmailConversationMetrics(store);

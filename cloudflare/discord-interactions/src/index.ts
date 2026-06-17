@@ -978,15 +978,19 @@ async function deleteDiscordMessage(
   return response.ok || response.status === 404;
 }
 
-async function archiveDiscordThread(botToken: string, threadId: string): Promise<void> {
-  await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
-    method: "PATCH",
+async function deleteDiscordThread(botToken: string, threadId: string): Promise<void> {
+  const response = await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
+    method: "DELETE",
     headers: {
       Authorization: `Bot ${botToken}`,
-      "Content-Type": "application/json",
     },
-    body: JSON.stringify({ archived: true }),
   });
+  if (!response.ok && response.status !== 404) {
+    console.error(
+      `Failed to delete Discord thread ${threadId}: ${response.status}`,
+      await response.text().catch(() => "")
+    );
+  }
 }
 
 async function createDiscordThreadFromMessage(
@@ -1162,7 +1166,7 @@ async function archiveTicketToClosedChannel(
   }
 
   if (ticket.threadId) {
-    await archiveDiscordThread(botToken, ticket.threadId);
+    await deleteDiscordThread(botToken, ticket.threadId);
   }
 
   const deleted = await deleteDiscordMessage(botToken, activeChannelId, activeMessageId);
