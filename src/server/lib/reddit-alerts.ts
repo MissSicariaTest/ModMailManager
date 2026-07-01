@@ -770,9 +770,16 @@ export async function sendModQueueAlertFromAutomodPost(
     return;
   }
 
-  const username = event.author || "Unknown";
   const contentPreview = post.selftext || post.title || "";
   const title = post.title || previewText(contentPreview, 100);
+
+  let username = "Unknown";
+  try {
+    const livePost = await reddit.getPostById(toPostId(post.id));
+    username = livePost.authorName ?? event.author ?? "Unknown";
+  } catch {
+    username = event.author ?? "Unknown";
+  }
 
   await sendModQueueEmbed(subredditName, {
     title,
@@ -799,10 +806,15 @@ export async function sendModQueueAlertFromAutomodComment(
   const contentPreview = comment.body ?? "";
   const title = previewText(contentPreview, 100) || "AutoMod Filtered Comment";
 
+  // comment.author and event.author may be Reddit user IDs (t2_xxx) rather
+  // than usernames; prefer comment.author if it doesn't look like an ID
+  const rawAuthor = comment.author || event.author || "Unknown";
+  const username = /^t2_[a-z0-9]+$/i.test(rawAuthor) ? "Unknown" : rawAuthor;
+
   await sendModQueueEmbed(subredditName, {
     title,
     url: redditPermalinkUrl(comment.permalink),
-    username: event.author || comment.author || "Unknown",
+    username,
     contentType: "comment",
     reason: event.reason,
     contentPreview,
