@@ -9,7 +9,8 @@
     "http": {
       "enable": true,
       "domains": [
-        "discord.com"
+        "discord.com",
+        "api.modmailmanager.com"
       ]
     },
     "redis": true,
@@ -78,7 +79,7 @@
       "discordInteractionsWorkerUrl": {
         "type": "string",
         "label": "Cloudflare Worker URL (optional)",
-        "helpText": "Leave blank — closed tickets and Discord buttons work without this. Only fill in if your Worker domain has been approved in Reddit Developer Settings and you want Discord button metrics in daily reports."
+        "helpText": "Only fill in if your Worker domain has been approved in Reddit Developer Settings. Use your custom domain if configured (e.g. https://api.modmailmanager.com). Enables Discord button metrics in daily reports."
       },
       "discordInteractionsWorkerSecret": {
         "type": "string",
