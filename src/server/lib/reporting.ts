@@ -308,11 +308,20 @@ async function buildSubredditReportFields(
 ): Promise<DiscordEmbedField[]> {
   const label = subredditLabel ?? displaySubredditLabel(subreddit);
   const workerMetrics = workerSnapshot?.subreddits[subreddit];
+  const workerAvailable = workerSnapshot !== null;
   const openUnclaimed =
     workerMetrics?.openUnclaimed ?? (await countOpenUnclaimedTickets(subreddit));
-  const handlerSummary = workerMetrics
-    ? formatWorkerHandlerSummary(workerMetrics.handlers)
-    : formatHandlerSummary(getHandlerStats(store, subreddit));
+
+  // When the Worker snapshot is unavailable, ticket action counts from Discord
+  // cannot be fetched. Show N/A rather than 0 to avoid misleading numbers.
+  const naIfNoWorker = (n: number) =>
+    workerAvailable ? String(workerMetrics ? n : 0) : "N/A";
+
+  const handlerSummary = workerAvailable
+    ? workerMetrics
+      ? formatWorkerHandlerSummary(workerMetrics.handlers)
+      : formatHandlerSummary(getHandlerStats(store, subreddit))
+    : "N/A — Discord ticket actions require Worker domain approval in Reddit Developer Settings.";
 
   const ticketClaimed = workerMetrics?.ticketsClaimed ?? metrics.ticketsClaimed;
   const ticketClosed = workerMetrics?.ticketsClosed ?? metrics.ticketsClosed;
@@ -401,32 +410,32 @@ async function buildSubredditReportFields(
     },
     {
       name: `${label} — Tickets Claimed`,
-      value: truncateField(String(ticketClaimed)),
+      value: truncateField(naIfNoWorker(ticketClaimed)),
       inline: true,
     },
     {
       name: `${label} — Tickets Closed`,
-      value: truncateField(String(ticketClosed)),
+      value: truncateField(naIfNoWorker(ticketClosed)),
       inline: true,
     },
     {
       name: `${label} — Tickets Resolved`,
-      value: truncateField(String(ticketResolved)),
+      value: truncateField(naIfNoWorker(ticketResolved)),
       inline: true,
     },
     {
       name: `${label} — Tickets Unresolved`,
-      value: truncateField(String(ticketUnresolved)),
+      value: truncateField(naIfNoWorker(ticketUnresolved)),
       inline: true,
     },
     {
       name: `${label} — Tickets Reassigned`,
-      value: truncateField(String(ticketReassigned)),
+      value: truncateField(naIfNoWorker(ticketReassigned)),
       inline: true,
     },
     {
       name: `${label} — Tickets Reopened`,
-      value: truncateField(String(ticketReopened)),
+      value: truncateField(naIfNoWorker(ticketReopened)),
       inline: true,
     },
     {
