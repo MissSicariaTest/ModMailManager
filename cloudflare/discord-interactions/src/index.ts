@@ -153,13 +153,97 @@ export default {
       return getHealthStatusWithSync(env);
     }
 
-    if (request.method === "GET" && url.pathname === "/") {
-      return new Response("ModMailManager Discord interactions worker", { status: 200 });
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/docs")) {
+      return new Response(API_DOCUMENTATION, {
+        status: 200,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
     }
 
     return new Response("Not found", { status: 404 });
   },
 };
+
+const API_DOCUMENTATION = `ModMailManager — Discord Interactions Worker (api.modmailmanager.com)
+=======================================================================
+
+This Cloudflare Worker is the companion service for the ModMailManager
+Reddit app (https://developers.reddit.com/apps/modmailmanager).
+Source code: https://github.com/MissSicariaTest/ModMailManager
+
+WHY THIS SERVICE EXISTS
+-----------------------
+Devvit apps cannot receive inbound HTTP requests from external services.
+Discord ticket buttons (Claim / Close / Resolved / Unresolved / Reassign /
+Reopen) require a publicly reachable Interactions Endpoint that verifies
+Discord's Ed25519 request signatures and responds within 3 seconds.
+This Worker fills that role. The Reddit app then makes a small number of
+authenticated calls to this domain to exchange ticket state and aggregated
+metrics, documented below.
+
+AUTHENTICATION
+--------------
+All /api/* endpoints (except /api/health) require:
+  Authorization: Bearer <WORKER_SECRET>
+The secret is configured by the installing moderator on both the Worker
+and the Reddit app settings. Requests without it receive 401.
+
+ENDPOINTS CALLED BY THE REDDIT APP (server-side fetch)
+------------------------------------------------------
+
+POST /api/tickets/register
+  Called when a new alert is sent to Discord. Body: JSON ticket record
+  (ticket id, status, Discord message/channel ids, embed content, closed-
+  channel webhook credentials). Stores the record in Cloudflare KV so
+  button clicks can update the correct Discord message.
+  Returns: {"ok": true, "id": "..."}
+
+GET /api/tickets/{ticketId}
+  Fetches the current state of one ticket (status, assignee, Discord
+  message ids) so the Reddit app can post thread follow-ups to the right
+  place after buttons have moved or updated the message.
+  Returns: JSON ticket record, or 404.
+
+POST /api/config/closed-webhooks
+  Syncs the moderator-configured closed-tickets Discord webhook
+  credentials (webhook id + token only) so the Worker can move closed
+  ticket embeds to the archive channel.
+  Returns: {"ok": true}
+
+GET /api/report/snapshot
+  Returns aggregated, numeric ticket-action counts for the daily
+  moderation report: tickets claimed/closed/resolved/unresolved/
+  reassigned/reopened, open unclaimed count, and per-Discord-username
+  action tallies. Contains NO Reddit content, NO modmail text, and NO
+  Reddit usernames.
+
+POST /api/report/reset
+  Resets the aggregated counters after the daily report is sent.
+  Returns: {"ok": true}
+
+ENDPOINTS NOT CALLED BY THE REDDIT APP
+--------------------------------------
+
+POST /  (and /discord/interactions)
+  Discord Interactions Endpoint. Receives button clicks and modal
+  submissions directly from Discord, verified via Ed25519 signature.
+
+GET /api/health
+  Public, unauthenticated configuration health check (booleans only).
+
+GET / and /docs
+  This documentation.
+
+DATA HANDLING
+-------------
+- Stored in Cloudflare KV: ticket state records and aggregated action
+  counters. Counters reset after each daily report cycle.
+- No Reddit content flows from Reddit to this service. The Reddit app
+  only SENDS ticket display state (already visible in the moderators'
+  own Discord channel) and RECEIVES aggregated numbers.
+- Privacy policy:
+  https://github.com/MissSicariaTest/ModMailManager/blob/main/PRIVACY.md
+`;
 
 function authorizeWorker(request: Request, env: Env): boolean {
   const auth = request.headers.get("Authorization") ?? "";
