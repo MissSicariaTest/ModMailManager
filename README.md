@@ -247,6 +247,34 @@ When a modmail or post alert is sent to Discord:
 
 ---
 
+## External Domain: api.modmailmanager.com
+
+The Reddit app requests HTTP Fetch access to one external domain: **`api.modmailmanager.com`** — a Cloudflare Worker operated by the app developer. Live API documentation is served at [api.modmailmanager.com](https://api.modmailmanager.com) and mirrored below.
+
+### Why this cannot be done directly in Devvit
+
+Discord interactive buttons require a publicly reachable **Interactions Endpoint URL** registered in the Discord Developer Portal. When a moderator clicks a button, Discord sends an HTTP POST to that endpoint, requires [Ed25519 signature verification](https://discord.com/developers/docs/interactions/receiving-and-responding#security-and-authorization), and requires a response within 3 seconds. Devvit apps cannot receive inbound HTTP requests from external services, so the Interactions Endpoint cannot be hosted on Devvit. The Cloudflare Worker fills exactly this gap: it receives Discord button clicks, verifies signatures, updates ticket embeds, and moves closed tickets — all Discord-to-Worker traffic that never touches Reddit.
+
+The Reddit app itself only calls the Worker for two purposes: registering ticket display state when it sends an alert, and retrieving **aggregated numeric counts** for the daily moderation report. Without the fetch approval, ticket buttons still work fully; only the daily-report metric counts are unavailable.
+
+### API calls made by the Reddit app
+
+All endpoints require `Authorization: Bearer <WORKER_SECRET>` (a secret the installing moderator configures on both sides). Endpoints:
+
+| Endpoint | Method | Purpose | Data sent | Data received |
+| --- | --- | --- | --- | --- |
+| `/api/tickets/register` | POST | Register a new ticket when an alert is posted to Discord, so button clicks can update the right message | Ticket id, status, Discord message/channel ids, embed display content (already visible in the moderators' own Discord channel), closed-channel webhook credentials | `{"ok": true}` |
+| `/api/tickets/{id}` | GET | Look up current ticket state so thread follow-ups post to the correct (possibly moved) Discord message | Ticket id in URL | JSON ticket record |
+| `/api/config/closed-webhooks` | POST | Sync the moderator-configured closed-tickets Discord webhook credentials | Discord webhook id + token pairs | `{"ok": true}` |
+| `/api/report/snapshot` | GET | Fetch aggregated ticket-action counts for the daily moderation report | None | Numeric counts only: tickets claimed/closed/resolved/unresolved/reassigned/reopened, open unclaimed count, per-Discord-username action tallies |
+| `/api/report/reset` | POST | Reset aggregated counters after the daily report is sent | None | `{"ok": true}` |
+
+**No Reddit content, modmail text, or Reddit usernames are transmitted to this domain.** The Worker's other endpoints (`POST /` for Discord interactions, `GET /api/health`) are called by Discord and operators respectively — never by the Reddit app.
+
+Data handling details are covered in the [Privacy Policy](PRIVACY.md), Section 4.
+
+---
+
 ## What each alert includes
 
 **Modmail alerts**
