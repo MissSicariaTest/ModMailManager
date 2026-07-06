@@ -51,9 +51,6 @@ export async function fetchTicketFromWorker(ticketId: string): Promise<TicketRec
 export async function registerTicketWithWorker(ticket: TicketRecord): Promise<boolean> {
   const config = await getWorkerConfig();
   if (!config) {
-    console.error(
-      "Worker URL and shared secret are missing in Reddit app settings. Closed-ticket moves and ticket registration require both."
-    );
     return false;
   }
 
@@ -96,9 +93,6 @@ export async function registerTicketWithWorker(ticket: TicketRecord): Promise<bo
 export async function syncClosedWebhooksToWorker(): Promise<boolean> {
   const config = await getWorkerConfig();
   if (!config) {
-    console.error(
-      "Cannot sync Webhook 7 to the Worker because Cloudflare Worker URL and shared secret are missing in Reddit app settings."
-    );
     return false;
   }
 

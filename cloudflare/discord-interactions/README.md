@@ -69,14 +69,16 @@ In **Settings → Variables** (use encrypted secrets, not plain variables):
 | --- | --- |
 | `DISCORD_PUBLIC_KEY` | Discord Developer Portal → your app → **General Information → Public Key** |
 | `DISCORD_BOT_TOKEN` | Discord Developer Portal → **Bot → Token** (same bot invited to your server) |
-| `WORKER_SECRET` | A long random string — **must match** the **Cloudflare Worker Shared Secret** in Reddit app settings |
+| `WORKER_SECRET` | A long random string — used to verify requests between Reddit and this Worker (optional, only needed for report metrics) |
 
-Optional closed-ticket webhook fallbacks (used if Reddit has not synced Webhook 7 yet):
+Closed-ticket webhook secrets (**required** for closed-ticket archive to work):
 
 | Secret | Purpose |
 | --- | --- |
-| `CLOSED_TICKETS_WEBHOOK_PRIMARY` | Full Discord webhook URL for the primary closed-tickets channel |
-| `CLOSED_TICKETS_WEBHOOK_SECONDARY` | Full Discord webhook URL for the secondary closed-tickets channel |
+| `CLOSED_TICKETS_WEBHOOK_SPECTRUM` | Full Discord webhook URL for your primary closed-tickets channel (Webhook 7) |
+| `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` | Full Discord webhook URL for your secondary closed-tickets channel (Webhook 8) — only if monitoring two subreddits |
+
+> **Important:** Set these webhook secrets directly here in Cloudflare. Reddit's domain approval policy for public apps prevents the Reddit app from calling back to individual Cloudflare Worker URLs, so Reddit cannot sync these automatically. The **Cloudflare Worker URL** and **Shared Secret** fields in the Reddit app settings can be left blank — Discord buttons, closed-ticket moves, and all ticket management work fully without them.
 
 After deploying, copy your Worker URL (for example `https://modmail.your-name.workers.dev`).
 
@@ -99,11 +101,11 @@ Go to `https://developers.reddit.com/r/YOUR-SUBREDDIT/apps/modmailmanager` and f
 | --- | --- |
 | Discord Bot Token | Your bot token |
 | Discord Application Public Key | Public Key from Developer Portal |
-| Cloudflare Worker URL | Your deployed Worker URL (no trailing slash) |
-| Cloudflare Worker Shared Secret | Same value as `WORKER_SECRET` on the Worker |
+| Cloudflare Worker URL | **Leave blank** — not needed for buttons or closed tickets |
+| Cloudflare Worker Shared Secret | **Leave blank** — not needed for buttons or closed tickets |
 | Webhook 7 — Closed Tickets (Primary) | Webhook URL for the closed-tickets archive channel |
 
-Save, then trigger a new alert (send a modmail to your subreddit) so the app syncs Webhook 7 to the Worker.
+Webhook 7 is still needed in the Reddit app settings so the Reddit app knows to tag each ticket with the closed-channel destination when it sends the initial alert. The actual move is performed by the Cloudflare Worker using `CLOSED_TICKETS_WEBHOOK_SPECTRUM` — both must be set to the same webhook URL.
 
 ---
 
@@ -115,9 +117,9 @@ curl https://YOUR-WORKER.workers.dev/api/health
 
 Expected response fields:
 
-- `ok: true` — secrets are configured
-- `closedWebhooksFromReddit.primary: true` — Webhook 7 has been synced from Reddit settings
-- `CLOSED_TICKETS_WEBHOOK_*: false` — optional Cloudflare fallback secrets not set (normal if Reddit sync works)
+- `ok: true` — required secrets are configured
+- `CLOSED_TICKETS_WEBHOOK_SPECTRUM: true` — primary closed-tickets webhook is set ✓
+- `closedWebhooksFromReddit.*` — ignore these; Reddit sync is not used for public apps
 
 ---
 

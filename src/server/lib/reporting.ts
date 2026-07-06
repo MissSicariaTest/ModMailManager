@@ -1,4 +1,4 @@
-import { redis, settings } from "@devvit/web/server";
+import { reddit, redis, settings } from "@devvit/web/server";
 import {
   DAILY_REPORT_REDIS_KEY,
   DAILY_REPORT_SENT_REDIS_KEY,
@@ -303,15 +303,25 @@ async function buildSubredditReportFields(
   subreddit: MonitoredSubreddit,
   metrics: SubredditMetrics,
   store: DailyReportStore,
-  workerSnapshot: WorkerReportSnapshot | null
+  workerSnapshot: WorkerReportSnapshot | null,
+  subredditLabel?: string
 ): Promise<DiscordEmbedField[]> {
-  const label = displaySubredditLabel(subreddit);
+  const label = subredditLabel ?? displaySubredditLabel(subreddit);
   const workerMetrics = workerSnapshot?.subreddits[subreddit];
+  const workerAvailable = workerSnapshot !== null;
   const openUnclaimed =
     workerMetrics?.openUnclaimed ?? (await countOpenUnclaimedTickets(subreddit));
-  const handlerSummary = workerMetrics
-    ? formatWorkerHandlerSummary(workerMetrics.handlers)
-    : formatHandlerSummary(getHandlerStats(store, subreddit));
+
+  // When the Worker snapshot is unavailable, ticket action counts from Discord
+  // cannot be fetched. Show N/A rather than 0 to avoid misleading numbers.
+  const naIfNoWorker = (n: number) =>
+    workerAvailable ? String(workerMetrics ? n : 0) : "N/A";
+
+  const handlerSummary = workerAvailable
+    ? workerMetrics
+      ? formatWorkerHandlerSummary(workerMetrics.handlers)
+      : formatHandlerSummary(getHandlerStats(store, subreddit))
+    : "N/A — Discord ticket actions require Worker domain approval in Reddit Developer Settings.";
 
   const ticketClaimed = workerMetrics?.ticketsClaimed ?? metrics.ticketsClaimed;
   const ticketClosed = workerMetrics?.ticketsClosed ?? metrics.ticketsClosed;
@@ -400,32 +410,32 @@ async function buildSubredditReportFields(
     },
     {
       name: `${label} — Tickets Claimed`,
-      value: truncateField(String(ticketClaimed)),
+      value: truncateField(naIfNoWorker(ticketClaimed)),
       inline: true,
     },
     {
       name: `${label} — Tickets Closed`,
-      value: truncateField(String(ticketClosed)),
+      value: truncateField(naIfNoWorker(ticketClosed)),
       inline: true,
     },
     {
       name: `${label} — Tickets Resolved`,
-      value: truncateField(String(ticketResolved)),
+      value: truncateField(naIfNoWorker(ticketResolved)),
       inline: true,
     },
     {
       name: `${label} — Tickets Unresolved`,
-      value: truncateField(String(ticketUnresolved)),
+      value: truncateField(naIfNoWorker(ticketUnresolved)),
       inline: true,
     },
     {
       name: `${label} — Tickets Reassigned`,
-      value: truncateField(String(ticketReassigned)),
+      value: truncateField(naIfNoWorker(ticketReassigned)),
       inline: true,
     },
     {
       name: `${label} — Tickets Reopened`,
-      value: truncateField(String(ticketReopened)),
+      value: truncateField(naIfNoWorker(ticketReopened)),
       inline: true,
     },
     {
@@ -496,49 +506,70 @@ export async function sendDailyReport(): Promise<void> {
     return;
   }
 
+  let primarySubredditName: string;
+  try {
+    const sub = await reddit.getCurrentSubreddit();
+    primarySubredditName = sub.name;
+  } catch {
+    primarySubredditName = "Primary Subreddit";
+  }
+
+  const rawSecondary = ((await settings.get("secondarySubredditName")) as string | undefined)?.trim() || null;
+  // Only show the secondary section if a different subreddit name is actually configured
+  const secondarySubredditName =
+    rawSecondary && rawSecondary.toLowerCase() !== primarySubredditName.toLowerCase()
+      ? rawSecondary
+      : null;
+
   const store = await getDailyReportStore();
   finalizeModmailConversationMetrics(store);
   reconcilePostMetrics(store);
   const workerSnapshot = await fetchWorkerReportSnapshot();
 
   const generatedAt = new Date();
-  const footerText = truncateField(`Report generated ${formatReportGeneratedAt(generatedAt)}`);
+  const workerNote = workerSnapshot === null
+    ? "⚠️ Discord ticket actions unavailable — Worker domain not yet approved in Devvit settings."
+    : null;
+  const footerText = truncateField(`Report generated ${formatReportGeneratedAt(generatedAt)}${workerNote ? ` | ${workerNote}` : ""}`);
   const periodField: DiscordEmbedField = {
     name: "Reporting Period",
     value: truncateField(formatReportingPeriod(store, generatedAt)),
   };
 
-  const payload: DiscordWebhookPayload = {
-    embeds: [
-      {
-        title: truncateTitle("Daily Moderation Report"),
-        fields: [
-          periodField,
-          ...(await buildSubredditReportFields(
-            "spectrum",
-            getMetrics(store, "spectrum"),
-            store,
-            workerSnapshot
-          )),
-        ],
-        color: SPECTRUM_BLUE,
-        footer: { text: footerText },
-      },
-      {
-        title: truncateTitle("Daily Moderation Report — r/Spectrum_Official"),
-        fields: await buildSubredditReportFields(
-          "spectrum_official",
-          getMetrics(store, "spectrum_official"),
+  const embeds: DiscordWebhookPayload["embeds"] = [
+    {
+      title: truncateTitle(`Daily Moderation Report — r/${primarySubredditName}`),
+      fields: [
+        periodField,
+        ...(await buildSubredditReportFields(
+          "spectrum",
+          getMetrics(store, "spectrum"),
           store,
-          workerSnapshot
-        ),
-        color: SPECTRUM_BLUE,
-        footer: { text: footerText },
-      },
-    ],
-  };
+          workerSnapshot,
+          `r/${primarySubredditName}`
+        )),
+      ],
+      color: SPECTRUM_BLUE,
+      footer: { text: footerText },
+    },
+  ];
 
-  await sendDiscordWebhook(webhook, payload);
+  if (secondarySubredditName) {
+    embeds.push({
+      title: truncateTitle(`Daily Moderation Report — r/${secondarySubredditName}`),
+      fields: await buildSubredditReportFields(
+        "spectrum_official",
+        getMetrics(store, "spectrum_official"),
+        store,
+        workerSnapshot,
+        `r/${secondarySubredditName}`
+      ),
+      color: SPECTRUM_BLUE,
+      footer: { text: footerText },
+    });
+  }
+
+  await sendDiscordWebhook(webhook, { embeds });
 }
 
 export async function safeTrack(task: () => Promise<void>): Promise<void> {

@@ -172,18 +172,27 @@ function isSecretConfigured(value: string | undefined): boolean {
 }
 
 function getHealthStatus(env: Env): Record<string, unknown> {
+  const primaryWebhookSet = isSecretConfigured(env.CLOSED_TICKETS_WEBHOOK_SPECTRUM);
+  const primaryWebhookValid = primaryWebhookSet
+    ? parseWebhookUrl(env.CLOSED_TICKETS_WEBHOOK_SPECTRUM) !== null
+    : false;
+  const secondaryWebhookSet = isSecretConfigured(env.CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL);
+  const secondaryWebhookValid = secondaryWebhookSet
+    ? parseWebhookUrl(env.CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL) !== null
+    : false;
+
   return {
     ok: isSecretConfigured(env.DISCORD_PUBLIC_KEY) && isSecretConfigured(env.WORKER_SECRET),
     secrets: {
       DISCORD_PUBLIC_KEY: isSecretConfigured(env.DISCORD_PUBLIC_KEY),
       WORKER_SECRET: isSecretConfigured(env.WORKER_SECRET),
       DISCORD_BOT_TOKEN: isSecretConfigured(env.DISCORD_BOT_TOKEN),
-      CLOSED_TICKETS_WEBHOOK_SPECTRUM: isSecretConfigured(env.CLOSED_TICKETS_WEBHOOK_SPECTRUM),
-      CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL: isSecretConfigured(
-        env.CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL
-      ),
+      CLOSED_TICKETS_WEBHOOK_SPECTRUM: primaryWebhookSet,
+      CLOSED_TICKETS_WEBHOOK_SPECTRUM_valid: primaryWebhookValid,
+      CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL: secondaryWebhookSet,
+      CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL_valid: secondaryWebhookValid,
     },
-    note: "CLOSED_TICKETS_WEBHOOK_* false only means the optional Cloudflare secret is unset. Use closedWebhooksFromReddit to see whether Webhook 7 was synced from Reddit.",
+    note: "CLOSED_TICKETS_WEBHOOK_SPECTRUM_valid must be true for closed-ticket archiving to work. If set but not valid, the URL format is wrong — it must be a full Discord webhook URL containing /api/webhooks/.",
   };
 }
 
@@ -978,15 +987,19 @@ async function deleteDiscordMessage(
   return response.ok || response.status === 404;
 }
 
-async function archiveDiscordThread(botToken: string, threadId: string): Promise<void> {
-  await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
-    method: "PATCH",
+async function deleteDiscordThread(botToken: string, threadId: string): Promise<void> {
+  const response = await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
+    method: "DELETE",
     headers: {
       Authorization: `Bot ${botToken}`,
-      "Content-Type": "application/json",
     },
-    body: JSON.stringify({ archived: true }),
   });
+  if (!response.ok && response.status !== 404) {
+    console.error(
+      `Failed to delete Discord thread ${threadId}: ${response.status}`,
+      await response.text().catch(() => "")
+    );
+  }
 }
 
 async function createDiscordThreadFromMessage(
@@ -1162,7 +1175,7 @@ async function archiveTicketToClosedChannel(
   }
 
   if (ticket.threadId) {
-    await archiveDiscordThread(botToken, ticket.threadId);
+    await deleteDiscordThread(botToken, ticket.threadId);
   }
 
   const deleted = await deleteDiscordMessage(botToken, activeChannelId, activeMessageId);
@@ -1323,7 +1336,7 @@ async function finalizeTicketInteraction(
         if (!closedWebhook) {
           await sendInteractionFollowup(
             interaction,
-            `${archiveActionLabel(action)} in place. Webhook 7 is saved in Reddit but has not reached the Worker yet. In Reddit app settings, also add your Cloudflare Worker URL and shared secret (same value as WORKER_SECRET on Cloudflare), save, then send a NEW alert. Quick fix: add Cloudflare secret CLOSED_TICKETS_WEBHOOK_SPECTRUM with your full Webhook 7 URL.`
+            `${archiveActionLabel(action)} in place. The closed-tickets channel is not configured on the Cloudflare Worker. In Cloudflare Worker secrets, add \`CLOSED_TICKETS_WEBHOOK_SPECTRUM\` with the full Discord Webhook 7 URL (e.g. https://discord.com/api/webhooks/123/token). Check that the URL is complete and contains /api/webhooks/.`
           );
           return;
         }
