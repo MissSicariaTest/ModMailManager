@@ -40,7 +40,7 @@ import type {
 import {
   buildTicketButtons,
   buildTicketEmbed,
-  buildTicketPayload,
+  getDiscordBotMessage,
   createDiscordThreadFromMessage,
   createTicketId,
   editDiscordBotMessage,
@@ -318,20 +318,37 @@ async function postTicketFollowUp(
   };
   ticket.updatedAt = new Date().toISOString();
 
-  const editResult = await editDiscordBotMessage(
-    botToken,
-    ticket.channelId,
-    ticket.messageId,
-    buildTicketPayload(ticket)
-  );
+  // Fetch the live message rather than rewriting it from Redis state.
+  // Button clicks (claim/close/etc.) are handled by the Cloudflare Worker and
+  // never reach Redis, so pushing Redis state would visually reset the ticket
+  // to Open while the Worker still considers it claimed — making Claim fail
+  // with "already claimed" on a ticket that looks unclaimed.
+  const currentMessage = await getDiscordBotMessage(botToken, ticket.channelId, ticket.messageId);
 
-  if (editResult === "not_found") {
+  if (currentMessage.result === "not_found") {
     // The base message is gone — the Worker closed/moved this ticket in
     // Discord. Mark the Redis copy dead so the caller sends a fresh alert
     // instead of posting follow-ups into deleted messages or orphaned threads.
     ticket.archived = true;
     await saveTicket(ticket);
     return false;
+  }
+
+  if (currentMessage.result === "ok" && currentMessage.embeds[0]) {
+    const liveEmbed = currentMessage.embeds[0];
+    const liveFields = [...(liveEmbed.fields ?? [])];
+    const liveIndex = liveFields.findIndex((field) => field.name === options.previewFieldName);
+    if (liveIndex >= 0) {
+      liveFields[liveIndex] = {
+        ...liveFields[liveIndex],
+        value: truncateField(previewText(options.preview)),
+      };
+      // PATCH with embeds only: Discord preserves the existing components
+      // (buttons) and we preserve the live Status/Assigned To fields.
+      await editDiscordBotMessage(botToken, ticket.channelId, ticket.messageId, {
+        embeds: [{ ...liveEmbed, fields: liveFields }],
+      });
+    }
   }
 
   const ping = await buildFollowUpPing(ticket, options.pingAssignee ?? false);

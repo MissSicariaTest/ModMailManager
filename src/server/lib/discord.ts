@@ -285,6 +285,36 @@ export async function sendDiscordBotThreadMessage(
 
 export type EditMessageResult = "ok" | "not_found" | "error";
 
+export type GetMessageResult =
+  | { result: "ok"; embeds: DiscordEmbed[] }
+  | { result: "not_found" }
+  | { result: "error" };
+
+export async function getDiscordBotMessage(
+  botToken: string,
+  channelId: string,
+  messageId: string
+): Promise<GetMessageResult> {
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`,
+    {
+      headers: { Authorization: `Bot ${botToken}` },
+    }
+  );
+
+  if (response.status === 404) {
+    return { result: "not_found" };
+  }
+
+  if (!response.ok) {
+    console.error(`Error fetching Discord bot message: ${response.status}`);
+    return { result: "error" };
+  }
+
+  const data = (await response.json()) as { embeds?: DiscordEmbed[] };
+  return { result: "ok", embeds: data.embeds ?? [] };
+}
+
 export async function editDiscordBotMessage(
   botToken: string,
   channelId: string,
