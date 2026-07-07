@@ -349,8 +349,10 @@ by the Reddit app.
 SCHEDULED JOBS
 --------------
 A Cloudflare cron trigger posts a Daily Ticket Report (aggregated
-button-action counts per moderator) to the Discord webhook configured
-in the REPORTING_WEBHOOK secret, at ~8:05 AM US Eastern.
+button-action counts per moderator) at ~8:05 AM US Eastern. Each
+subreddit's report goes to REPORTING_WEBHOOK_SPECTRUM or
+REPORTING_WEBHOOK_SPECTRUM_OFFICIAL, with REPORTING_WEBHOOK as a
+shared fallback.
 
 DATA HANDLING
 -------------
@@ -392,6 +394,11 @@ function getHealthStatus(env: Env): Record<string, unknown> {
       CLOSED_TICKETS_WEBHOOK_SPECTRUM_valid: primaryWebhookValid,
       CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL: secondaryWebhookSet,
       CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL_valid: secondaryWebhookValid,
+      REPORTING_WEBHOOK_SPECTRUM: isSecretConfigured(env.REPORTING_WEBHOOK_SPECTRUM),
+      REPORTING_WEBHOOK_SPECTRUM_OFFICIAL: isSecretConfigured(
+        env.REPORTING_WEBHOOK_SPECTRUM_OFFICIAL
+      ),
+      REPORTING_WEBHOOK: isSecretConfigured(env.REPORTING_WEBHOOK),
     },
     note: "CLOSED_TICKETS_WEBHOOK_SPECTRUM_valid must be true for closed-ticket archiving to work. If set but not valid, the URL format is wrong — it must be a full Discord webhook URL containing /api/webhooks/.",
   };
