@@ -25,12 +25,12 @@ The App accesses the following information through Reddit's Devvit platform:
 
 ## 4. Optional Ticket Management Service (Cloudflare Worker)
 
-If moderators enable the optional Discord ticket management feature, a companion service (`api.modmailmanager.com`, a Cloudflare Worker operated by the App developer) processes Discord button interactions:
+If moderators enable the optional Discord ticket management feature, a companion Cloudflare Worker operated by the App developer processes Discord button interactions:
 
 - **What it receives from Discord:** button click events (Claim, Close, Resolved, Unresolved, Reassign, Reopen), the Discord username of the moderator who clicked, and the ticket embed content already visible in the moderators' own Discord channel.
 - **What it stores:** ticket state (status, assignee, action history) and aggregated per-moderator action counts, held in Cloudflare KV storage. Ticket records are overwritten as tickets change, and metric counters are reset after each daily reporting cycle.
-- **What the Reddit App fetches from it:** only aggregated, numeric action counts (for example, "3 tickets closed today") for inclusion in the daily moderation report. No modmail content, Reddit usernames, or subreddit content is transmitted from Reddit to this service.
-- This service is not contacted at all unless moderators explicitly configure it in the App settings.
+- **What it sends:** embed updates and a daily aggregated ticket-action summary, posted only to the Discord channels and webhooks that moderators configure.
+- **The Reddit App does not communicate with this service in either direction.** No Reddit content, modmail text, Reddit usernames, or subreddit data ever reaches this service.
 
 ## 5. Information Shared
 

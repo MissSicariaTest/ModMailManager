@@ -9,8 +9,7 @@
     "http": {
       "enable": true,
       "domains": [
-        "discord.com",
-        "api.modmailmanager.com"
+        "discord.com"
       ]
     },
     "redis": true,
@@ -75,16 +74,6 @@
         "type": "string",
         "label": "Discord Application Public Key",
         "helpText": "From Discord Developer Portal → General Information → Public Key. Required to verify button interactions."
-      },
-      "discordInteractionsWorkerUrl": {
-        "type": "string",
-        "label": "Cloudflare Worker URL (optional)",
-        "helpText": "Only fill in if your Worker domain has been approved in Reddit Developer Settings. Use your custom domain if configured (e.g. https://api.modmailmanager.com). Enables Discord button metrics in daily reports."
-      },
-      "discordInteractionsWorkerSecret": {
-        "type": "string",
-        "label": "Cloudflare Worker Shared Secret (optional)",
-        "helpText": "Only required if Cloudflare Worker URL above is set. Must match WORKER_SECRET on your Cloudflare Worker."
       },
       "discordBotToken": {
         "type": "string",

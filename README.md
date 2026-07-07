@@ -192,9 +192,10 @@ In **Settings → Variables** (use encrypted secrets):
 | --- | --- |
 | `DISCORD_PUBLIC_KEY` | Developer Portal → your app → **General Information → Public Key** |
 | `DISCORD_BOT_TOKEN` | The bot token you copied above |
-| `WORKER_SECRET` | Generate a long random string — you will use the same value in Reddit app settings |
-| `CLOSED_TICKETS_WEBHOOK_PRIMARY` | *(Optional)* Full webhook URL for Webhook 7 (closed tickets fallback) |
-| `CLOSED_TICKETS_WEBHOOK_SECONDARY` | *(Optional)* Full webhook URL for Webhook 8 (closed tickets fallback) |
+| `WORKER_SECRET` | Generate a long random string (protects the Worker's API endpoints) |
+| `CLOSED_TICKETS_WEBHOOK_SPECTRUM` | Full Discord webhook URL for your closed-tickets channel (Webhook 7) — required for closed-ticket moves |
+| `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` | *(Optional)* Full webhook URL for the secondary closed-tickets channel (Webhook 8) |
+| `REPORTING_WEBHOOK` | *(Optional)* Discord webhook URL for your reporting channel — enables the daily ticket-actions report at ~8:05 AM Eastern |
 
 After deploying, copy your Worker URL (for example `https://modmail.your-name.workers.dev`).
 
@@ -228,11 +229,9 @@ Go to `https://developers.reddit.com/r/YOUR-SUBREDDIT-NAME/apps/modmailmanager` 
 | --- | --- |
 | **Discord Bot Token** | The bot token from your Discord application |
 | **Discord Application Public Key** | The Public Key from Developer Portal → General Information |
-| **Cloudflare Worker URL** | Your deployed Worker URL (no trailing slash) |
-| **Cloudflare Worker Shared Secret** | Same value as `WORKER_SECRET` on the Worker |
 | **Webhook 7 — Closed Tickets (Primary)** | Discord webhook for the closed-tickets archive channel |
 
-Click **Save Changes**, then trigger a new alert by sending a modmail to your subreddit. This lets the app sync Webhook 7 to the Worker.
+Click **Save Changes**. Also set the same Webhook 7 URL as the `CLOSED_TICKETS_WEBHOOK_SPECTRUM` secret on the Cloudflare Worker — the Worker performs the actual move when tickets close.
 
 ---
 
@@ -247,31 +246,22 @@ When a modmail or post alert is sent to Discord:
 
 ---
 
-## External Domain: api.modmailmanager.com
+## Architecture: no external fetch domains required
 
-The Reddit app requests HTTP Fetch access to one external domain: **`api.modmailmanager.com`** — a Cloudflare Worker operated by the app developer. Live API documentation is served at [api.modmailmanager.com](https://api.modmailmanager.com) and mirrored below.
+The Reddit app makes outbound calls **only to `discord.com`**, which is on Devvit's global fetch allowlist. It does not call any developer-run servers.
 
-### Why this cannot be done directly in Devvit
+The optional Cloudflare Worker (`cloudflare/discord-interactions`) is **Discord-facing only**:
 
-Discord interactive buttons require a publicly reachable **Interactions Endpoint URL** registered in the Discord Developer Portal. When a moderator clicks a button, Discord sends an HTTP POST to that endpoint, requires [Ed25519 signature verification](https://discord.com/developers/docs/interactions/receiving-and-responding#security-and-authorization), and requires a response within 3 seconds. Devvit apps cannot receive inbound HTTP requests from external services, so the Interactions Endpoint cannot be hosted on Devvit. The Cloudflare Worker fills exactly this gap: it receives Discord button clicks, verifies signatures, updates ticket embeds, and moves closed tickets — all Discord-to-Worker traffic that never touches Reddit.
+- **Discord → Worker:** button clicks arrive at the Worker (registered as the Discord Interactions Endpoint URL). Devvit apps cannot receive inbound HTTP requests, and Discord requires Ed25519 signature verification with a 3-second response — which is why this piece runs on Cloudflare.
+- **Worker → Discord:** the Worker edits embeds, moves closed tickets to the archive channel (using the `CLOSED_TICKETS_WEBHOOK_SPECTRUM` secret), and posts its own **Daily Ticket Report** to your reporting channel on a schedule (using the `REPORTING_WEBHOOK` secret and Cloudflare cron triggers).
+- **Reddit ↔ Worker: no traffic in either direction.** The Reddit app never fetches from the Worker, so no Devvit domain exception is needed.
 
-The Reddit app itself only calls the Worker for two purposes: registering ticket display state when it sends an alert, and retrieving **aggregated numeric counts** for the daily moderation report. Without the fetch approval, ticket buttons still work fully; only the daily-report metric counts are unavailable.
+### Daily reporting is two embeds
 
-### API calls made by the Reddit app
+1. **Daily Moderation Report** — sent by the Reddit app at 8:00 AM US Eastern: modmail volume, response times, new posts, mod queue activity.
+2. **Daily Ticket Report — Discord Actions** — sent by the Worker at ~8:05 AM US Eastern to the same channel: tickets claimed/closed/resolved/unresolved/reassigned/reopened, open unclaimed count, and per-moderator action tallies.
 
-All endpoints require `Authorization: Bearer <WORKER_SECRET>` (a secret the installing moderator configures on both sides). Endpoints:
-
-| Endpoint | Method | Purpose | Data sent | Data received |
-| --- | --- | --- | --- | --- |
-| `/api/tickets/register` | POST | Register a new ticket when an alert is posted to Discord, so button clicks can update the right message | Ticket id, status, Discord message/channel ids, embed display content (already visible in the moderators' own Discord channel), closed-channel webhook credentials | `{"ok": true}` |
-| `/api/tickets/{id}` | GET | Look up current ticket state so thread follow-ups post to the correct (possibly moved) Discord message | Ticket id in URL | JSON ticket record |
-| `/api/config/closed-webhooks` | POST | Sync the moderator-configured closed-tickets Discord webhook credentials | Discord webhook id + token pairs | `{"ok": true}` |
-| `/api/report/snapshot` | GET | Fetch aggregated ticket-action counts for the daily moderation report | None | Numeric counts only: tickets claimed/closed/resolved/unresolved/reassigned/reopened, open unclaimed count, per-Discord-username action tallies |
-| `/api/report/reset` | POST | Reset aggregated counters after the daily report is sent | None | `{"ok": true}` |
-
-**No Reddit content, modmail text, or Reddit usernames are transmitted to this domain.** The Worker's other endpoints (`POST /` for Discord interactions, `GET /api/health`) are called by Discord and operators respectively — never by the Reddit app.
-
-Data handling details are covered in the [Privacy Policy](PRIVACY.md), Section 4.
+To enable the second report, add a `REPORTING_WEBHOOK` secret on the Cloudflare Worker containing the same Discord webhook URL you use for the reporting channel.
 
 ---
 
@@ -336,6 +326,12 @@ npm run deploy
 ---
 
 ## Changelog
+
+**July 7, 2026 Update**
+
+- Removed all Reddit-to-Worker communication. Reddit's fetch-domain policy does not grant exceptions to individual developers, so the app now makes outbound calls only to `discord.com` (globally allowlisted). No domain exceptions are requested or required.
+- Discord ticket-action metrics are now delivered as a separate **Daily Ticket Report** embed, posted directly by the Cloudflare Worker on a cron schedule (~8:05 AM US Eastern) to the reporting channel via the new `REPORTING_WEBHOOK` Worker secret.
+- Removed the Cloudflare Worker URL and Shared Secret settings from the Reddit app — they are no longer used.
 
 **June 17, 2026 Update**
 

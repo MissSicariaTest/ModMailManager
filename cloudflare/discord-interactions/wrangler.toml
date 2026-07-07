@@ -1,7 +1,11 @@
 name = "modmail"
 main = "src/index.ts"
 compatibility_date = "2024-08-01"
-# Redeploy trigger: Discord-only button handling (e708788)
+
+# Daily ticket report: runs at 12:05 and 13:05 UTC; code sends only when
+# it is 8 AM in America/New_York (handles EST/EDT) and only once per day.
+[triggers]
+crons = ["5 12 * * *", "5 13 * * *"]
 
 # Create KV namespaces in Cloudflare Dashboard (Workers & Pages → KV),
 # then paste the IDs below before your first deploy.
