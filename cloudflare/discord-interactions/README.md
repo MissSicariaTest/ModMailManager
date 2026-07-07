@@ -78,11 +78,15 @@ Closed-ticket webhook secrets (**required** for closed-ticket archive to work):
 | `CLOSED_TICKETS_WEBHOOK_SPECTRUM` | Full Discord webhook URL for your primary closed-tickets channel (Webhook 7) |
 | `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` | Full Discord webhook URL for your secondary closed-tickets channel (Webhook 8) — only if monitoring two subreddits |
 
-Daily ticket report (optional):
+Daily ticket report (optional — set at least one):
 
 | Secret | Purpose |
 | --- | --- |
-| `REPORTING_WEBHOOK` | Full Discord webhook URL for your reporting channel. When set, the Worker posts a **Daily Ticket Report** (buttons clicked, per-moderator tallies, open unclaimed count) at ~8:05 AM US Eastern via Cloudflare cron triggers, right after the Reddit app's Daily Moderation Report. |
+| `REPORTING_WEBHOOK_SPECTRUM` | Discord webhook URL for the **primary** subreddit's reporting channel. Receives that subreddit's Daily Ticket Report. |
+| `REPORTING_WEBHOOK_SPECTRUM_OFFICIAL` | Discord webhook URL for the **secondary** subreddit's reporting channel. |
+| `REPORTING_WEBHOOK` | Shared fallback — used for any subreddit whose specific secret above is unset. Set only this one if both reports should go to the same channel. |
+
+Reports post at ~8:05 AM US Eastern via Cloudflare cron triggers, right after the Reddit app's Daily Moderation Report. Each subreddit gets its own embed in its own channel.
 
 > **Important:** Reddit does not grant fetch-domain exceptions to individual developers, so the Reddit app never calls this Worker. All webhook configuration lives here in Cloudflare secrets, and all reporting from this Worker is pushed directly to Discord. Discord buttons, closed-ticket moves, and ticket reports all work without any Reddit-side Worker configuration.
 

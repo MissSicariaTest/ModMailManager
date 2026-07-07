@@ -14,6 +14,8 @@ export interface Env {
   CLOSED_TICKETS_WEBHOOK_SPECTRUM?: string;
   CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL?: string;
   REPORTING_WEBHOOK?: string;
+  REPORTING_WEBHOOK_SPECTRUM?: string;
+  REPORTING_WEBHOOK_SPECTRUM_OFFICIAL?: string;
 }
 
 type TicketAction =
@@ -209,9 +211,35 @@ function formatHandlerLines(handlers: Record<string, Record<string, number>>): s
     .slice(0, 1024);
 }
 
+function resolveReportingWebhook(env: Env, subreddit: string): string | null {
+  const specific =
+    subreddit === "spectrum_official"
+      ? env.REPORTING_WEBHOOK_SPECTRUM_OFFICIAL
+      : env.REPORTING_WEBHOOK_SPECTRUM;
+  return specific?.trim() || env.REPORTING_WEBHOOK?.trim() || null;
+}
+
+function buildSubredditTicketFields(
+  metrics: ReportSnapshot["subreddits"][string]
+): Array<{ name: string; value: string; inline?: boolean }> {
+  return [
+    { name: "Tickets Claimed", value: String(metrics.ticketsClaimed), inline: true },
+    { name: "Tickets Closed", value: String(metrics.ticketsClosed), inline: true },
+    { name: "Tickets Resolved", value: String(metrics.ticketsResolved), inline: true },
+    { name: "Tickets Unresolved", value: String(metrics.ticketsUnresolved), inline: true },
+    { name: "Tickets Reassigned", value: String(metrics.ticketsReassigned), inline: true },
+    { name: "Tickets Reopened", value: String(metrics.ticketsReopened), inline: true },
+    { name: "Open Unclaimed Tickets", value: String(metrics.openUnclaimed), inline: true },
+    { name: "Discord Handlers", value: formatHandlerLines(metrics.handlers), inline: false },
+  ];
+}
+
 async function maybeSendDailyTicketReport(env: Env): Promise<void> {
-  const webhook = env.REPORTING_WEBHOOK?.trim();
-  if (!webhook) {
+  const anyWebhook =
+    env.REPORTING_WEBHOOK?.trim() ||
+    env.REPORTING_WEBHOOK_SPECTRUM?.trim() ||
+    env.REPORTING_WEBHOOK_SPECTRUM_OFFICIAL?.trim();
+  if (!anyWebhook) {
     return;
   }
 
@@ -229,34 +257,6 @@ async function maybeSendDailyTicketReport(env: Env): Promise<void> {
   const raw = (await env.REPORT.get("snapshot")) ?? JSON.stringify(createEmptySnapshot());
   const snapshot = JSON.parse(raw) as ReportSnapshot;
 
-  const fields: Array<{ name: string; value: string; inline?: boolean }> = [];
-  for (const [subreddit, metrics] of Object.entries(snapshot.subreddits)) {
-    const label = subredditReportLabel(subreddit);
-    const hasActivity =
-      metrics.ticketsClaimed +
-        metrics.ticketsClosed +
-        metrics.ticketsResolved +
-        metrics.ticketsUnresolved +
-        metrics.ticketsReassigned +
-        metrics.ticketsReopened >
-        0 || Object.keys(metrics.handlers).length > 0;
-
-    if (subreddit === "spectrum_official" && !hasActivity) {
-      continue;
-    }
-
-    fields.push(
-      { name: `${label} — Tickets Claimed`, value: String(metrics.ticketsClaimed), inline: true },
-      { name: `${label} — Tickets Closed`, value: String(metrics.ticketsClosed), inline: true },
-      { name: `${label} — Tickets Resolved`, value: String(metrics.ticketsResolved), inline: true },
-      { name: `${label} — Tickets Unresolved`, value: String(metrics.ticketsUnresolved), inline: true },
-      { name: `${label} — Tickets Reassigned`, value: String(metrics.ticketsReassigned), inline: true },
-      { name: `${label} — Tickets Reopened`, value: String(metrics.ticketsReopened), inline: true },
-      { name: `${label} — Open Unclaimed Tickets`, value: String(metrics.openUnclaimed), inline: true },
-      { name: `${label} — Discord Handlers`, value: formatHandlerLines(metrics.handlers), inline: false }
-    );
-  }
-
   const generatedAt = new Intl.DateTimeFormat("en-US", {
     timeZone: REPORT_TIMEZONE,
     year: "numeric",
@@ -267,33 +267,46 @@ async function maybeSendDailyTicketReport(env: Env): Promise<void> {
     timeZoneName: "short",
   }).format(now);
 
-  const response = await fetch(webhook, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      embeds: [
-        {
-          title: "Daily Ticket Report — Discord Actions",
-          description: "Ticket button activity recorded since the previous report.",
-          fields,
-          color: 0x005fff,
-          footer: { text: `Report generated ${generatedAt}` },
-        },
-      ],
-    }),
-  });
+  let anySent = false;
 
-  if (!response.ok) {
-    console.error(
-      "Daily ticket report webhook failed:",
-      response.status,
-      await response.text().catch(() => "")
-    );
-    return;
+  for (const [subreddit, metrics] of Object.entries(snapshot.subreddits)) {
+    const webhook = resolveReportingWebhook(env, subreddit);
+    if (!webhook) {
+      continue;
+    }
+
+    const label = subredditReportLabel(subreddit);
+    const response = await fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [
+          {
+            title: `Daily Ticket Report — ${label}`,
+            description: "Discord ticket button activity recorded since the previous report.",
+            fields: buildSubredditTicketFields(metrics),
+            color: 0x005fff,
+            footer: { text: `Report generated ${generatedAt}` },
+          },
+        ],
+      }),
+    });
+
+    if (response.ok) {
+      anySent = true;
+    } else {
+      console.error(
+        `Daily ticket report webhook failed for ${subreddit}:`,
+        response.status,
+        await response.text().catch(() => "")
+      );
+    }
   }
 
-  await env.REPORT.put(REPORT_SENT_KEY, todayKey);
-  await env.REPORT.put("snapshot", JSON.stringify(createEmptySnapshot()));
+  if (anySent) {
+    await env.REPORT.put(REPORT_SENT_KEY, todayKey);
+    await env.REPORT.put("snapshot", JSON.stringify(createEmptySnapshot()));
+  }
 }
 
 const API_DOCUMENTATION = `ModMailManager — Discord Interactions Worker
