@@ -195,7 +195,9 @@ In **Settings → Variables** (use encrypted secrets):
 | `WORKER_SECRET` | Generate a long random string (protects the Worker's API endpoints) |
 | `CLOSED_TICKETS_WEBHOOK_SPECTRUM` | Full Discord webhook URL for your closed-tickets channel (Webhook 7) — required for closed-ticket moves |
 | `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` | *(Optional)* Full webhook URL for the secondary closed-tickets channel (Webhook 8) |
-| `REPORTING_WEBHOOK` | *(Optional)* Discord webhook URL for your reporting channel — enables the daily ticket-actions report at ~8:05 AM Eastern |
+| `REPORTING_WEBHOOK_SPECTRUM` | *(Optional)* Reporting-channel webhook for the primary subreddit — enables its daily ticket-actions report at ~8:05 AM Eastern |
+| `REPORTING_WEBHOOK_SPECTRUM_OFFICIAL` | *(Optional)* Reporting-channel webhook for the secondary subreddit |
+| `REPORTING_WEBHOOK` | *(Optional)* Shared fallback if both reports should go to one channel |
 
 After deploying, copy your Worker URL (for example `https://modmail.your-name.workers.dev`).
 
