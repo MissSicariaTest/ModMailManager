@@ -318,12 +318,21 @@ async function postTicketFollowUp(
   };
   ticket.updatedAt = new Date().toISOString();
 
-  await editDiscordBotMessage(
+  const editResult = await editDiscordBotMessage(
     botToken,
     ticket.channelId,
     ticket.messageId,
     buildTicketPayload(ticket)
   );
+
+  if (editResult === "not_found") {
+    // The base message is gone — the Worker closed/moved this ticket in
+    // Discord. Mark the Redis copy dead so the caller sends a fresh alert
+    // instead of posting follow-ups into deleted messages or orphaned threads.
+    ticket.archived = true;
+    await saveTicket(ticket);
+    return false;
+  }
 
   const ping = await buildFollowUpPing(ticket, options.pingAssignee ?? false);
   const threadId = await ensureTicketThread(ticket, botToken, options.title);
