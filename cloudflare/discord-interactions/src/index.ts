@@ -13,6 +13,7 @@ export interface Env {
   WORKER_SECRET: string;
   CLOSED_TICKETS_WEBHOOK_SPECTRUM?: string;
   CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL?: string;
+  REPORTING_WEBHOOK?: string;
 }
 
 type TicketAction =
@@ -162,14 +163,149 @@ export default {
 
     return new Response("Not found", { status: 404 });
   },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(maybeSendDailyTicketReport(env));
+  },
 };
 
-const API_DOCUMENTATION = `ModMailManager — Discord Interactions Worker (api.modmailmanager.com)
-=======================================================================
+const REPORT_TIMEZONE = "America/New_York";
+const REPORT_HOUR = 8;
+const REPORT_SENT_KEY = "report:lastSentDate";
 
-This Cloudflare Worker is the companion service for the ModMailManager
-Reddit app (https://developers.reddit.com/apps/modmailmanager).
+function getLocalHour(date: Date, timeZone: string): number {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    hour12: false,
+  }).format(date);
+  return Number.parseInt(hour, 10);
+}
+
+function getDateKeyInTimezone(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function subredditReportLabel(subreddit: string): string {
+  return subreddit === "spectrum_official" ? "Secondary Subreddit" : "Primary Subreddit";
+}
+
+function formatHandlerLines(handlers: Record<string, Record<string, number>>): string {
+  const entries = Object.entries(handlers);
+  if (entries.length === 0) {
+    return "No Discord ticket actions recorded.";
+  }
+  return entries
+    .map(([username, stats]) => {
+      const parts = Object.entries(stats).map(([action, count]) => `${count} ${action}`);
+      return `${username}: ${parts.join(", ") || "no actions"}`;
+    })
+    .join("\n")
+    .slice(0, 1024);
+}
+
+async function maybeSendDailyTicketReport(env: Env): Promise<void> {
+  const webhook = env.REPORTING_WEBHOOK?.trim();
+  if (!webhook) {
+    return;
+  }
+
+  const now = new Date();
+  if (getLocalHour(now, REPORT_TIMEZONE) !== REPORT_HOUR) {
+    return;
+  }
+
+  const todayKey = getDateKeyInTimezone(now, REPORT_TIMEZONE);
+  const lastSent = await env.REPORT.get(REPORT_SENT_KEY);
+  if (lastSent === todayKey) {
+    return;
+  }
+
+  const raw = (await env.REPORT.get("snapshot")) ?? JSON.stringify(createEmptySnapshot());
+  const snapshot = JSON.parse(raw) as ReportSnapshot;
+
+  const fields: Array<{ name: string; value: string; inline?: boolean }> = [];
+  for (const [subreddit, metrics] of Object.entries(snapshot.subreddits)) {
+    const label = subredditReportLabel(subreddit);
+    const hasActivity =
+      metrics.ticketsClaimed +
+        metrics.ticketsClosed +
+        metrics.ticketsResolved +
+        metrics.ticketsUnresolved +
+        metrics.ticketsReassigned +
+        metrics.ticketsReopened >
+        0 || Object.keys(metrics.handlers).length > 0;
+
+    if (subreddit === "spectrum_official" && !hasActivity) {
+      continue;
+    }
+
+    fields.push(
+      { name: `${label} — Tickets Claimed`, value: String(metrics.ticketsClaimed), inline: true },
+      { name: `${label} — Tickets Closed`, value: String(metrics.ticketsClosed), inline: true },
+      { name: `${label} — Tickets Resolved`, value: String(metrics.ticketsResolved), inline: true },
+      { name: `${label} — Tickets Unresolved`, value: String(metrics.ticketsUnresolved), inline: true },
+      { name: `${label} — Tickets Reassigned`, value: String(metrics.ticketsReassigned), inline: true },
+      { name: `${label} — Tickets Reopened`, value: String(metrics.ticketsReopened), inline: true },
+      { name: `${label} — Open Unclaimed Tickets`, value: String(metrics.openUnclaimed), inline: true },
+      { name: `${label} — Discord Handlers`, value: formatHandlerLines(metrics.handlers), inline: false }
+    );
+  }
+
+  const generatedAt = new Intl.DateTimeFormat("en-US", {
+    timeZone: REPORT_TIMEZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(now);
+
+  const response = await fetch(webhook, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      embeds: [
+        {
+          title: "Daily Ticket Report — Discord Actions",
+          description: "Ticket button activity recorded since the previous report.",
+          fields,
+          color: 0x005fff,
+          footer: { text: `Report generated ${generatedAt}` },
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    console.error(
+      "Daily ticket report webhook failed:",
+      response.status,
+      await response.text().catch(() => "")
+    );
+    return;
+  }
+
+  await env.REPORT.put(REPORT_SENT_KEY, todayKey);
+  await env.REPORT.put("snapshot", JSON.stringify(createEmptySnapshot()));
+}
+
+const API_DOCUMENTATION = `ModMailManager — Discord Interactions Worker
+=============================================
+
+This Cloudflare Worker is the Discord-facing companion for the
+ModMailManager Reddit app
+(https://developers.reddit.com/apps/modmailmanager).
 Source code: https://github.com/MissSicariaTest/ModMailManager
+
+The Reddit app does NOT call this Worker. All traffic here is between
+Discord and this Worker.
 
 WHY THIS SERVICE EXISTS
 -----------------------
@@ -177,56 +313,15 @@ Devvit apps cannot receive inbound HTTP requests from external services.
 Discord ticket buttons (Claim / Close / Resolved / Unresolved / Reassign /
 Reopen) require a publicly reachable Interactions Endpoint that verifies
 Discord's Ed25519 request signatures and responds within 3 seconds.
-This Worker fills that role. The Reddit app then makes a small number of
-authenticated calls to this domain to exchange ticket state and aggregated
-metrics, documented below.
+This Worker fills that role.
 
-AUTHENTICATION
---------------
-All /api/* endpoints (except /api/health) require:
-  Authorization: Bearer <WORKER_SECRET>
-The secret is configured by the installing moderator on both the Worker
-and the Reddit app settings. Requests without it receive 401.
-
-ENDPOINTS CALLED BY THE REDDIT APP (server-side fetch)
-------------------------------------------------------
-
-POST /api/tickets/register
-  Called when a new alert is sent to Discord. Body: JSON ticket record
-  (ticket id, status, Discord message/channel ids, embed content, closed-
-  channel webhook credentials). Stores the record in Cloudflare KV so
-  button clicks can update the correct Discord message.
-  Returns: {"ok": true, "id": "..."}
-
-GET /api/tickets/{ticketId}
-  Fetches the current state of one ticket (status, assignee, Discord
-  message ids) so the Reddit app can post thread follow-ups to the right
-  place after buttons have moved or updated the message.
-  Returns: JSON ticket record, or 404.
-
-POST /api/config/closed-webhooks
-  Syncs the moderator-configured closed-tickets Discord webhook
-  credentials (webhook id + token only) so the Worker can move closed
-  ticket embeds to the archive channel.
-  Returns: {"ok": true}
-
-GET /api/report/snapshot
-  Returns aggregated, numeric ticket-action counts for the daily
-  moderation report: tickets claimed/closed/resolved/unresolved/
-  reassigned/reopened, open unclaimed count, and per-Discord-username
-  action tallies. Contains NO Reddit content, NO modmail text, and NO
-  Reddit usernames.
-
-POST /api/report/reset
-  Resets the aggregated counters after the daily report is sent.
-  Returns: {"ok": true}
-
-ENDPOINTS NOT CALLED BY THE REDDIT APP
---------------------------------------
+ENDPOINTS
+---------
 
 POST /  (and /discord/interactions)
   Discord Interactions Endpoint. Receives button clicks and modal
   submissions directly from Discord, verified via Ed25519 signature.
+  Updates ticket embeds, moves closed tickets to the archive channel.
 
 GET /api/health
   Public, unauthenticated configuration health check (booleans only).
@@ -234,13 +329,22 @@ GET /api/health
 GET / and /docs
   This documentation.
 
+Authenticated /api/* endpoints (Bearer WORKER_SECRET) exist for
+operator diagnostics (ticket lookup, report snapshot) but are not used
+by the Reddit app.
+
+SCHEDULED JOBS
+--------------
+A Cloudflare cron trigger posts a Daily Ticket Report (aggregated
+button-action counts per moderator) to the Discord webhook configured
+in the REPORTING_WEBHOOK secret, at ~8:05 AM US Eastern.
+
 DATA HANDLING
 -------------
 - Stored in Cloudflare KV: ticket state records and aggregated action
   counters. Counters reset after each daily report cycle.
-- No Reddit content flows from Reddit to this service. The Reddit app
-  only SENDS ticket display state (already visible in the moderators'
-  own Discord channel) and RECEIVES aggregated numbers.
+- Data sources: Discord button interactions and embed content already
+  visible in the moderators' own Discord channels.
 - Privacy policy:
   https://github.com/MissSicariaTest/ModMailManager/blob/main/PRIVACY.md
 `;

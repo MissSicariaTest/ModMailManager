@@ -75,7 +75,6 @@ import {
   saveTicket,
   unlinkRedditKey,
 } from "./tickets.js";
-import { fetchTicketFromWorker, registerTicketWithWorker, syncClosedWebhooksToWorker } from "./worker-client.js";
 
 function toPostId(id: string): `t3_${string}` {
   return (id.startsWith("t3_") ? id : `t3_${id}`) as `t3_${string}`;
@@ -193,15 +192,9 @@ async function resolveActiveTicketForFollowUp(
     return null;
   }
 
-  let ticket = await getTicket(ticketId);
+  const ticket = await getTicket(ticketId);
   if (!ticket) {
     return null;
-  }
-
-  const workerTicket = await fetchTicketFromWorker(ticketId);
-  if (workerTicket) {
-    ticket = workerTicket;
-    await saveTicket(ticket);
   }
 
   if (!isActiveTicket(ticket) || !ticket.messageId) {
@@ -290,7 +283,6 @@ async function ensureTicketThread(
 
   ticket.threadId = threadId;
   await saveTicket(ticket);
-  void registerTicketWithWorker(ticket);
   return threadId;
 }
 
@@ -367,7 +359,6 @@ async function postTicketFollowUp(
   }
 
   await saveTicket(ticket);
-  void registerTicketWithWorker(ticket);
   return true;
 }
 
@@ -382,8 +373,6 @@ async function sendTicketAlert(options: {
   redditKeyType?: RedditTicketKeyType;
   threadName?: string;
 }): Promise<void> {
-  await syncClosedWebhooksToWorker();
-
   const parsed = parseWebhookUrl(options.webhook);
   if (!parsed) {
     console.error("Unable to parse Discord webhook URL for ticket tracking.");
@@ -503,10 +492,6 @@ async function sendTicketAlert(options: {
       await linkRedditKeyToTicket(options.redditKeyType, options.redditKey, draftTicket.id);
     }
     await saveTicket(draftTicket);
-  }
-
-  if (buttonsAttached || draftTicket.closedWebhookId) {
-    await registerTicketWithWorker(draftTicket);
   }
 }
 

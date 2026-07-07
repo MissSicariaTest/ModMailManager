@@ -21,12 +21,6 @@ import {
   truncateField,
   truncateTitle,
 } from "./discord.js";
-import { countOpenUnclaimedTickets } from "./tickets.js";
-import {
-  fetchWorkerReportSnapshot,
-  resetWorkerReportSnapshot,
-  type WorkerReportSnapshot,
-} from "./worker-client.js";
 
 const SPECTRUM_BLUE = 0x005fff;
 
@@ -208,43 +202,6 @@ function formatReportingPeriod(store: DailyReportStore, generatedAt: Date): stri
   return `${store.periodStartedAt} to ${generatedAt.toISOString()}`;
 }
 
-function formatWorkerHandlerSummary(
-  handlers: Record<string, Record<string, number>>
-): string {
-  const entries = Object.entries(handlers);
-  if (entries.length === 0) {
-    return "No Discord ticket actions recorded.";
-  }
-
-  return entries
-    .map(([username, stats]) => {
-      const parts = Object.entries(stats).map(([action, count]) => `${count} ${action}`);
-      return `${username}: ${parts.join(", ") || "no actions"}`;
-    })
-    .join("\n");
-}
-
-function formatHandlerSummary(handlers: TicketHandlerStats): string {
-  const entries = Object.entries(handlers);
-  if (entries.length === 0) {
-    return "No Discord ticket actions recorded.";
-  }
-
-  return entries
-    .map(([username, stats]) => {
-      const parts = [
-        stats.claimed ? `${stats.claimed} claimed` : "",
-        stats.closed ? `${stats.closed} closed` : "",
-        stats.resolved ? `${stats.resolved} resolved` : "",
-        stats.unresolved ? `${stats.unresolved} unresolved` : "",
-        stats.reassigned ? `${stats.reassigned} reassigned` : "",
-        stats.reopened ? `${stats.reopened} reopened` : "",
-      ].filter(Boolean);
-      return `${username}: ${parts.join(", ") || "no actions"}`;
-    })
-    .join("\n");
-}
-
 export function finalizeModmailConversationMetrics(store: DailyReportStore): void {
   for (const subreddit of MONITORED_SUBREDDITS) {
     getMetrics(store, subreddit).modmailUnresolved = 0;
@@ -299,36 +256,12 @@ export function reconcilePostMetrics(store: DailyReportStore): void {
   }
 }
 
-async function buildSubredditReportFields(
+function buildSubredditReportFields(
   subreddit: MonitoredSubreddit,
   metrics: SubredditMetrics,
-  store: DailyReportStore,
-  workerSnapshot: WorkerReportSnapshot | null,
   subredditLabel?: string
-): Promise<DiscordEmbedField[]> {
+): DiscordEmbedField[] {
   const label = subredditLabel ?? displaySubredditLabel(subreddit);
-  const workerMetrics = workerSnapshot?.subreddits[subreddit];
-  const workerAvailable = workerSnapshot !== null;
-  const openUnclaimed =
-    workerMetrics?.openUnclaimed ?? (await countOpenUnclaimedTickets(subreddit));
-
-  // When the Worker snapshot is unavailable, ticket action counts from Discord
-  // cannot be fetched. Show N/A rather than 0 to avoid misleading numbers.
-  const naIfNoWorker = (n: number) =>
-    workerAvailable ? String(workerMetrics ? n : 0) : "N/A";
-
-  const handlerSummary = workerAvailable
-    ? workerMetrics
-      ? formatWorkerHandlerSummary(workerMetrics.handlers)
-      : formatHandlerSummary(getHandlerStats(store, subreddit))
-    : "N/A — Discord ticket actions require Worker domain approval in Reddit Developer Settings.";
-
-  const ticketClaimed = workerMetrics?.ticketsClaimed ?? metrics.ticketsClaimed;
-  const ticketClosed = workerMetrics?.ticketsClosed ?? metrics.ticketsClosed;
-  const ticketResolved = workerMetrics?.ticketsResolved ?? metrics.ticketsResolved;
-  const ticketUnresolved = workerMetrics?.ticketsUnresolved ?? metrics.ticketsUnresolved;
-  const ticketReassigned = workerMetrics?.ticketsReassigned ?? metrics.ticketsReassigned;
-  const ticketReopened = workerMetrics?.ticketsReopened ?? metrics.ticketsReopened;
 
   return [
     {
@@ -409,43 +342,10 @@ async function buildSubredditReportFields(
       inline: true,
     },
     {
-      name: `${label} — Tickets Claimed`,
-      value: truncateField(naIfNoWorker(ticketClaimed)),
-      inline: true,
-    },
-    {
-      name: `${label} — Tickets Closed`,
-      value: truncateField(naIfNoWorker(ticketClosed)),
-      inline: true,
-    },
-    {
-      name: `${label} — Tickets Resolved`,
-      value: truncateField(naIfNoWorker(ticketResolved)),
-      inline: true,
-    },
-    {
-      name: `${label} — Tickets Unresolved`,
-      value: truncateField(naIfNoWorker(ticketUnresolved)),
-      inline: true,
-    },
-    {
-      name: `${label} — Tickets Reassigned`,
-      value: truncateField(naIfNoWorker(ticketReassigned)),
-      inline: true,
-    },
-    {
-      name: `${label} — Tickets Reopened`,
-      value: truncateField(naIfNoWorker(ticketReopened)),
-      inline: true,
-    },
-    {
-      name: `${label} — Open Unclaimed Tickets`,
-      value: truncateField(String(openUnclaimed)),
-      inline: true,
-    },
-    {
-      name: `${label} — Discord Handlers`,
-      value: truncateField(handlerSummary),
+      name: `${label} — Discord Ticket Actions`,
+      value: truncateField(
+        "Posted separately as the Daily Ticket Report by the ticket service."
+      ),
       inline: false,
     },
   ];
@@ -497,7 +397,6 @@ export async function maybeSendDailyReport(): Promise<void> {
   await sendDailyReport();
   await redis.set(DAILY_REPORT_SENT_REDIS_KEY, todayKey);
   await resetDailyReportStore();
-  await resetWorkerReportSnapshot();
 }
 
 export async function sendDailyReport(): Promise<void> {
@@ -524,13 +423,9 @@ export async function sendDailyReport(): Promise<void> {
   const store = await getDailyReportStore();
   finalizeModmailConversationMetrics(store);
   reconcilePostMetrics(store);
-  const workerSnapshot = await fetchWorkerReportSnapshot();
 
   const generatedAt = new Date();
-  const workerNote = workerSnapshot === null
-    ? "⚠️ Discord ticket actions unavailable — Worker domain not yet approved in Devvit settings."
-    : null;
-  const footerText = truncateField(`Report generated ${formatReportGeneratedAt(generatedAt)}${workerNote ? ` | ${workerNote}` : ""}`);
+  const footerText = truncateField(`Report generated ${formatReportGeneratedAt(generatedAt)}`);
   const periodField: DiscordEmbedField = {
     name: "Reporting Period",
     value: truncateField(formatReportingPeriod(store, generatedAt)),
@@ -541,13 +436,11 @@ export async function sendDailyReport(): Promise<void> {
       title: truncateTitle(`Daily Moderation Report — r/${primarySubredditName}`),
       fields: [
         periodField,
-        ...(await buildSubredditReportFields(
+        ...buildSubredditReportFields(
           "spectrum",
           getMetrics(store, "spectrum"),
-          store,
-          workerSnapshot,
           `r/${primarySubredditName}`
-        )),
+        ),
       ],
       color: SPECTRUM_BLUE,
       footer: { text: footerText },
@@ -557,11 +450,9 @@ export async function sendDailyReport(): Promise<void> {
   if (secondarySubredditName) {
     embeds.push({
       title: truncateTitle(`Daily Moderation Report — r/${secondarySubredditName}`),
-      fields: await buildSubredditReportFields(
+      fields: buildSubredditReportFields(
         "spectrum_official",
         getMetrics(store, "spectrum_official"),
-        store,
-        workerSnapshot,
         `r/${secondarySubredditName}`
       ),
       color: SPECTRUM_BLUE,

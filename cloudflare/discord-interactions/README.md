@@ -78,7 +78,13 @@ Closed-ticket webhook secrets (**required** for closed-ticket archive to work):
 | `CLOSED_TICKETS_WEBHOOK_SPECTRUM` | Full Discord webhook URL for your primary closed-tickets channel (Webhook 7) |
 | `CLOSED_TICKETS_WEBHOOK_SPECTRUM_OFFICIAL` | Full Discord webhook URL for your secondary closed-tickets channel (Webhook 8) — only if monitoring two subreddits |
 
-> **Important:** Set these webhook secrets directly here in Cloudflare. Reddit's domain approval policy for public apps prevents the Reddit app from calling back to individual Cloudflare Worker URLs, so Reddit cannot sync these automatically. The **Cloudflare Worker URL** and **Shared Secret** fields in the Reddit app settings can be left blank — Discord buttons, closed-ticket moves, and all ticket management work fully without them.
+Daily ticket report (optional):
+
+| Secret | Purpose |
+| --- | --- |
+| `REPORTING_WEBHOOK` | Full Discord webhook URL for your reporting channel. When set, the Worker posts a **Daily Ticket Report** (buttons clicked, per-moderator tallies, open unclaimed count) at ~8:05 AM US Eastern via Cloudflare cron triggers, right after the Reddit app's Daily Moderation Report. |
+
+> **Important:** Reddit does not grant fetch-domain exceptions to individual developers, so the Reddit app never calls this Worker. All webhook configuration lives here in Cloudflare secrets, and all reporting from this Worker is pushed directly to Discord. Discord buttons, closed-ticket moves, and ticket reports all work without any Reddit-side Worker configuration.
 
 After deploying, copy your Worker URL (for example `https://modmail.your-name.workers.dev`).
 
