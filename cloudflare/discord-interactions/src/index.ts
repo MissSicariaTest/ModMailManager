@@ -754,12 +754,21 @@ function bootstrapTicketFromInteraction(
   const subredditField = fields.find((field) => field.name === "Subreddit");
   const now = new Date().toISOString();
 
+  const status = parseStatusLabel(statusField?.value ?? "Open");
+  const assignedValue = assignedField?.value?.trim();
+  // Only trust the assignee when the ticket is actually claimed; ignore
+  // placeholder values so stale fields cannot block future claims.
+  const assignedTo =
+    status === "claimed" && assignedValue && !/^(unassigned|none|n\/a|—|-)$/i.test(assignedValue)
+      ? assignedValue
+      : undefined;
+
   return {
     id: ticketId,
     source: "modmail",
     subreddit: parseSubredditGroup(subredditField?.value ?? ""),
-    status: parseStatusLabel(statusField?.value ?? "Open"),
-    assignedTo: assignedField?.value,
+    status,
+    assignedTo,
     webhookId: "",
     webhookToken: "",
     messageId: message.id,
@@ -839,7 +848,12 @@ async function applyTicketAction(
       updated.status = "closed";
       break;
     case "reopen":
-      updated.status = updated.assignedTo ? "claimed" : "open";
+      // Always reopen as unassigned. Restoring the pre-close assignee
+      // confused mods: the ticket silently became "claimed" again and
+      // blocked everyone else from claiming it.
+      updated.status = "open";
+      updated.assignedTo = undefined;
+      updated.assignedToId = undefined;
       break;
     case "resolved":
       updated.status = "resolved";

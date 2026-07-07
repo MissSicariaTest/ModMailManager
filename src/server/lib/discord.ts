@@ -283,12 +283,14 @@ export async function sendDiscordBotThreadMessage(
   return sendDiscordBotMessage(botToken, threadId, payload);
 }
 
+export type EditMessageResult = "ok" | "not_found" | "error";
+
 export async function editDiscordBotMessage(
   botToken: string,
   channelId: string,
   messageId: string,
   payload: DiscordWebhookPayload
-): Promise<boolean> {
+): Promise<EditMessageResult> {
   const response = await fetch(
     `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`,
     {
@@ -301,15 +303,19 @@ export async function editDiscordBotMessage(
     }
   );
 
+  if (response.status === 404) {
+    return "not_found";
+  }
+
   if (!response.ok) {
     const responseBody = await response.text().catch(() => "");
     console.error(
       `Error editing Discord bot message: ${response.status} ${response.statusText} ${responseBody}`
     );
-    return false;
+    return "error";
   }
 
-  return true;
+  return "ok";
 }
 
 export async function deleteDiscordMessage(
