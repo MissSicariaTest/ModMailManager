@@ -1,0 +1,40 @@
+{
+  "private": true,
+  "name": "modmailmanager",
+  "version": "0.0.0",
+  "description": "ModMailManager — sends Reddit modmail, new posts, and mod queue alerts to Discord. Includes optional Discord ticket management with Claim, Close, Reassign, and more.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "type-check": "tsc --noEmit",
+    "bump-major": "npm run build && devvit upload --bump major",
+    "bump-minor": "npm run build && devvit upload --bump minor",
+    "bump-patch": "npm run build && devvit upload --bump patch",
+    "bump-prerelease": "npm run build && devvit upload --bump prerelease",
+    "publish-major": "npm run bump-major && devvit publish --public",
+    "publish-minor": "npm run bump-minor && devvit publish --public",
+    "publish-patch": "npm run bump-patch && devvit publish --public",
+    "publish-prerelease": "npm run bump-prerelease && devvit publish --public",
+    "test": "npm run test:unit",
+    "test:unit": "vitest --run --passWithNoTests"
+  },
+  "dependencies": {
+    "@devvit/web": "^0.13.9",
+    "hono": "4.12.25"
+  },
+  "devDependencies": {
+    "@devvit/public-api": "^0.13.9",
+    "@devvit/start": "^0.13.9",
+    "@hono/node-server": "2.0.5",
+    "@types/node": "^22.19.0",
+    "devvit": "^0.13.9",
+    "typescript": "5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.0.14"
+  },
+  "engines": {
+    "node": ">=22.2.0"
+  }
+}
